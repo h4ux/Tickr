@@ -1,0 +1,57 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserdata
+*.xcworkspace/xcuserdata/
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# Xcode personal settings
+*.xcuserstate
+*.xcbkptlist
+*.xcscheme
+
+# Build artifacts
+*.app
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.dmg
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
+
+# CocoaPods (not used but just in case)
+Pods/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Secrets (API keys) — see Secrets.example.swift
+Tickr/Services/Secrets.swift
+
+# License secrets and generated keys
+scripts/.license_secret
+licenses.json
+
+# Claude Code memory (machine-local)
+.claude/
+AppStore.md
+
+# Generated icons (regenerate with scripts/generate_icon.sh)
+scripts/icon.svg

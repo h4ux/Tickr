@@ -1,0 +1,43 @@
+{
+  "ads": [
+    {
+      "type": "text",
+      "text": "Track your portfolio like a pro. Try Tickr Pro — no ads, priority support.",
+      "sponsor": "Tickr",
+      "url": "https://github.com/h4ux/Tickr",
+      "ctaText": "Get License",
+      "countries": ["*"]
+    },
+    {
+      "type": "banner",
+      "sponsor": "Tickr Pro",
+      "url": "https://github.com/h4ux/Tickr",
+      "bannerURL": "https://h4ux.github.io/Tickr/ads/tickr-pro-banner.jpg",
+      "countries": ["*"]
+    },
+    {
+      "type": "text",
+      "text": "Open a free brokerage account. Commission-free stock trading.",
+      "sponsor": "Example Broker",
+      "url": "https://example.com",
+      "ctaText": "Sign Up",
+      "countries": ["US"]
+    },
+    {
+      "type": "text",
+      "text": "Invest in global markets from the UK. FCA regulated.",
+      "sponsor": "Example UK Broker",
+      "url": "https://example.com",
+      "ctaText": "Get Started",
+      "countries": ["GB"]
+    },
+    {
+      "type": "text",
+      "text": "Build better Mac apps. Developer tools for macOS.",
+      "sponsor": "Dev Tools",
+      "url": "https://example.com",
+      "ctaText": "Learn More",
+      "countries": ["US", "GB", "CA", "AU", "DE"]
+    }
+  ]
+}

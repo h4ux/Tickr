@@ -1,0 +1,152 @@
+name: Build & Release DMG
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for version calculation
+
+      - name: Calculate Version
+        id: version
+        run: |
+          # Get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          # Strip 'v' prefix
+          VERSION=${LATEST_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # Manual tag push — use the tag as-is (major version)
+            NEW_VERSION="${GITHUB_REF#refs/tags/v}"
+            echo "Tagged release: $NEW_VERSION"
+          else
+            # Auto build from push to main — bump patch
+            PATCH=$((PATCH + 1))
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+            echo "Auto patch bump: $NEW_VERSION"
+          fi
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $NEW_VERSION"
+
+      - name: Setup Secrets
+        run: |
+          # Create Secrets.swift from GitHub Secrets
+          cat > Tickr/Services/Secrets.swift << EOF
+          enum Secrets {
+              static let postHogAPIKey = "${{ secrets.POSTHOG_API_KEY }}"
+              static let licenseSecret = "${{ secrets.LICENSE_SECRET }}"
+              static let geoWorkerKey = "${{ secrets.GEO_WORKER_KEY }}"
+          }
+          EOF
+
+      - name: Update Version in Info.plist
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Tickr/Info.plist
+          # Use run number as build number for uniqueness
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" Tickr/Info.plist
+          echo "Set version to $VERSION (build ${{ github.run_number }})"
+
+      - name: Generate Icons
+        run: swift scripts/generate_icon.swift "${{ github.workspace }}"
+
+      - name: Create ICNS
+        run: |
+          swift scripts/create_icns.swift "${{ github.workspace }}"
+          iconutil -c icns build/Tickr.iconset -o build/Tickr.icns
+          rm -rf build/Tickr.iconset
+
+      - name: Build App
+        run: |
+          SDK_PATH=$(xcrun --show-sdk-path --sdk macosx)
+          APP_DIR="build/Tickr.app/Contents"
+          mkdir -p "$APP_DIR/MacOS" "$APP_DIR/Resources"
+
+          swiftc \
+            -sdk "$SDK_PATH" \
+            -target arm64-apple-macos13.0 \
+            -O \
+            -whole-module-optimization \
+            -o "$APP_DIR/MacOS/Tickr" \
+            Tickr/TickrApp.swift \
+            Tickr/Models/StockData.swift \
+            Tickr/Models/AppSettings.swift \
+            Tickr/Services/StockService.swift \
+            Tickr/Services/AnalyticsService.swift \
+            Tickr/Services/SuggestionsService.swift \
+            Tickr/Services/UpdateService.swift \
+            Tickr/Services/LicenseService.swift \
+            Tickr/Services/AdService.swift \
+            Tickr/Services/Secrets.swift \
+            Tickr/Views/StatusBarController.swift \
+            Tickr/Views/TickerDropdownView.swift \
+            Tickr/Views/SettingsView.swift
+
+          cp Tickr/Info.plist "$APP_DIR/Info.plist"
+          echo -n "APPL????" > "$APP_DIR/PkgInfo"
+          cp build/Tickr.icns "$APP_DIR/Resources/AppIcon.icns"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_DIR/Info.plist" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "$APP_DIR/Info.plist"
+
+          codesign --force --deep --sign - build/Tickr.app
+
+      - name: Generate DMG Background
+        run: swift scripts/generate_dmg_background.swift "${{ github.workspace }}"
+
+      - name: Create DMG
+        run: |
+          mkdir -p build/dmg_staging/.background
+          cp -R build/Tickr.app build/dmg_staging/Tickr.app
+          ln -s /Applications build/dmg_staging/Applications
+          cp build/dmg_background.png build/dmg_staging/.background/background.png
+
+          hdiutil create -srcfolder build/dmg_staging -volname "Tickr" \
+            -fs HFS+ -format UDZO -imagekey zlib-level=9 build/Tickr.dmg
+
+          rm -rf build/dmg_staging
+          ls -lh build/Tickr.dmg
+
+      - name: Upload DMG Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tickr-${{ steps.version.outputs.version }}.dmg
+          path: build/Tickr.dmg
+
+      - name: Create Auto Tag
+        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Tickr ${{ steps.version.outputs.version }}
+          files: build/Tickr.dmg
+          generate_release_notes: true
