@@ -153,48 +153,37 @@ class StockService: ObservableObject {
                 let exchange = meta.fullExchangeName ?? meta.exchangeName ?? ""
 
 
-                // Fetch enrichment data (sector + market cap) in parallel, then build quote
-                let enrichGroup = DispatchGroup()
-                var sector: String? = self?.sectorCache[symbol]?.sector
-                var industry: String? = self?.sectorCache[symbol]?.industry
-                var marketCap: String? = self?.marketCapCache[symbol]
+                // Return quote immediately with cached enrichment data
+                // Enrichment fetches in background — will be available on next refresh
+                let cachedSector = self?.sectorCache[symbol]
+                let cachedMCap = self?.marketCapCache[symbol]
 
-                if sector == nil {
-                    enrichGroup.enter()
-                    self?.fetchSectorInfo(symbol: symbol) { s, i in
-                        sector = s; industry = i
-                        enrichGroup.leave()
-                    }
+                let quote = StockQuote(
+                    symbol: meta.symbol,
+                    companyName: meta.longName ?? meta.shortName ?? meta.symbol,
+                    price: price,
+                    change: change,
+                    changePercent: changePercent,
+                    previousClose: previousClose,
+                    dayHigh: meta.regularMarketDayHigh,
+                    dayLow: meta.regularMarketDayLow,
+                    volume: meta.regularMarketVolume,
+                    fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+                    fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+                    currency: meta.currency ?? "USD",
+                    exchange: exchange,
+                    sector: cachedSector?.sector,
+                    industry: cachedSector?.industry,
+                    marketCap: cachedMCap
+                )
+                completion(.success(quote))
+
+                // Fetch enrichment in background (cached for next refresh)
+                if cachedSector == nil {
+                    self?.fetchSectorInfo(symbol: symbol) { _, _ in }
                 }
-
-                if marketCap == nil {
-                    enrichGroup.enter()
-                    self?.fetchMarketCap(symbol: symbol, exchange: exchange) { mc in
-                        marketCap = mc
-                        enrichGroup.leave()
-                    }
-                }
-
-                enrichGroup.notify(queue: .global()) {
-                    let quote = StockQuote(
-                        symbol: meta.symbol,
-                        companyName: meta.longName ?? meta.shortName ?? meta.symbol,
-                        price: price,
-                        change: change,
-                        changePercent: changePercent,
-                        previousClose: previousClose,
-                        dayHigh: meta.regularMarketDayHigh,
-                        dayLow: meta.regularMarketDayLow,
-                        volume: meta.regularMarketVolume,
-                        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-                        fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
-                        currency: meta.currency ?? "USD",
-                        exchange: exchange,
-                        sector: sector,
-                        industry: industry,
-                        marketCap: marketCap
-                    )
-                    completion(.success(quote))
+                if cachedMCap == nil {
+                    self?.fetchMarketCap(symbol: symbol, exchange: exchange) { _ in }
                 }
             } catch {
                 completion(.failure(error))
