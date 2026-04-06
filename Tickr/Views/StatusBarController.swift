@@ -26,28 +26,32 @@ class StatusBarController {
             button.target = self
         }
 
-        // React to quote changes and display setting changes
-        stockService.$quotes
-            .combineLatest(
-                settings.$displayFormat,
-                settings.$trendStyle,
-                settings.$colorMode
-            )
-            .sink { [weak self] _, _, _, _ in
-                self?.updateMenuBarDisplay(self?.stockService.primaryQuote)
-            }
-            .store(in: &cancellables)
+        // Single subscriber: any change to quotes or display settings → update menu bar
+        Publishers.CombineLatest4(
+            stockService.$quotes,
+            settings.$primarySymbol,
+            settings.$displayFormat,
+            settings.$trendStyle
+        )
+        .combineLatest(settings.$colorMode)
+        .receive(on: RunLoop.main)
+        .sink { [weak self] _, _ in
+            self?.updateMenuBarDisplay(self?.stockService.primaryQuote)
+        }
+        .store(in: &cancellables)
 
-        // When primary symbol changes, update immediately + fetch fresh data
+        // When primary symbol changes, also trigger a fetch
         settings.$primarySymbol
             .dropFirst()
             .sink { [weak self] _ in
-                self?.updateMenuBarDisplay(self?.stockService.primaryQuote)
                 self?.stockService.fetchQuotes()
             }
             .store(in: &cancellables)
 
-        stockService.startFetching()
+        // Delay startFetching slightly to ensure RunLoop is active
+        DispatchQueue.main.async { [weak self] in
+            self?.stockService.startFetching()
+        }
     }
 
     private func updateMenuBarDisplay(_ quote: StockQuote?) {
@@ -70,7 +74,6 @@ class StatusBarController {
             attributed.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium), range: range)
             button.attributedTitle = attributed
         } else {
-            // Show primary symbol while loading, not the app name
             let symbol = settings.primarySymbol
             if !symbol.isEmpty {
                 let text = "\(symbol) ..."
@@ -89,7 +92,6 @@ class StatusBarController {
         if popover.isShown {
             popover.performClose(nil)
         } else if let button = statusItem.button {
-            // Refresh quotes when opening the dropdown
             stockService.fetchQuotes()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)

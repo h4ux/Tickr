@@ -21,6 +21,7 @@ class StockService: ObservableObject {
         self.session = URLSession(configuration: config)
 
         settings.$refreshInterval
+            .dropFirst()
             .sink { [weak self] _ in self?.restartTimer() }
             .store(in: &cancellables)
 
