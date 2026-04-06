@@ -112,13 +112,17 @@ jobs:
 
       - name: Create DMG
         run: |
+          # Ensure no leftover mounts
+          hdiutil detach /Volumes/Tickr 2>/dev/null || true
+          rm -f build/Tickr.dmg
+
           mkdir -p build/dmg_staging/.background
           cp -R build/Tickr.app build/dmg_staging/Tickr.app
           ln -s /Applications build/dmg_staging/Applications
           cp build/dmg_background.png build/dmg_staging/.background/background.png
 
           hdiutil create -srcfolder build/dmg_staging -volname "Tickr" \
-            -fs HFS+ -format UDZO -imagekey zlib-level=9 build/Tickr.dmg
+            -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov build/Tickr.dmg
 
           rm -rf build/dmg_staging
           ls -lh build/Tickr.dmg
