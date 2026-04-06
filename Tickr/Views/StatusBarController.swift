@@ -26,21 +26,24 @@ class StatusBarController {
             button.target = self
         }
 
-        // React to quote changes, primary symbol changes, and display setting changes
+        // React to quote changes and display setting changes
         stockService.$quotes
             .combineLatest(
-                settings.$primarySymbol,
                 settings.$displayFormat,
-                settings.$trendStyle
+                settings.$trendStyle,
+                settings.$colorMode
             )
             .sink { [weak self] _, _, _, _ in
                 self?.updateMenuBarDisplay(self?.stockService.primaryQuote)
             }
             .store(in: &cancellables)
 
-        settings.$colorMode
+        // When primary symbol changes, update immediately + fetch fresh data
+        settings.$primarySymbol
+            .dropFirst()
             .sink { [weak self] _ in
                 self?.updateMenuBarDisplay(self?.stockService.primaryQuote)
+                self?.stockService.fetchQuotes()
             }
             .store(in: &cancellables)
 
