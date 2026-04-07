@@ -67,6 +67,9 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.menu)
 
+                    // Rotation
+                    RotationSettingsView()
+
                     // Live preview
                     HStack {
                         Text("Preview:")
@@ -534,6 +537,110 @@ struct CategorySettingsRow: View {
         guard !cleaned.isEmpty else { return }
         if settings.addSymbolToCategory(itemId: itemId, symbol: cleaned) {
             newSymbol = ""
+        }
+    }
+}
+
+// MARK: - Rotation Settings
+
+struct RotationSettingsView: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var stockService = StockService.shared
+    @State private var showPicker = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Rotate tickers in menu bar", isOn: $settings.rotationEnabled)
+
+            if settings.rotationEnabled {
+                Picker("Rotate every:", selection: $settings.rotationInterval) {
+                    ForEach(AppSettings.rotationIntervals, id: \.seconds) { interval in
+                        Text(interval.label).tag(interval.seconds)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                // Current rotation list
+                HStack {
+                    Text("Tickers (\(settings.rotatingSymbols.count)/5):")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    if settings.rotatingSymbols.count < 5 {
+                        Button(action: { showPicker.toggle() }) {
+                            Image(systemName: "plus.circle")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+
+                // Symbol chips
+                if !settings.rotatingSymbols.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(settings.rotatingSymbols, id: \.self) { symbol in
+                            HStack(spacing: 3) {
+                                Text(symbol)
+                                    .font(.system(.caption2, design: .monospaced, weight: .medium))
+                                Button(action: {
+                                    settings.rotatingSymbols.removeAll { $0 == symbol }
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.accentColor.opacity(0.1))
+                            .cornerRadius(4)
+                        }
+                    }
+                } else {
+                    Text("Add tickers to rotate in the menu bar")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+
+                // Picker to add symbols
+                if showPicker {
+                    let available = settings.allSymbols.filter { !settings.rotatingSymbols.contains($0) }
+                    if available.isEmpty {
+                        Text("All tickers already added")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 4) {
+                                ForEach(available, id: \.self) { symbol in
+                                    Button(action: {
+                                        if settings.rotatingSymbols.count < 5 {
+                                            settings.rotatingSymbols.append(symbol)
+                                        }
+                                        if settings.rotatingSymbols.count >= 5 { showPicker = false }
+                                    }) {
+                                        HStack(spacing: 3) {
+                                            Text(symbol)
+                                                .font(.system(.caption2, design: .monospaced))
+                                            if let q = stockService.quote(for: symbol) {
+                                                Text(q.shortCompanyName)
+                                                    .font(.system(size: 9))
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        }
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(Color.secondary.opacity(0.08))
+                                        .cornerRadius(4)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

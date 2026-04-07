@@ -174,6 +174,9 @@ class AppSettings: ObservableObject {
     private static let showAdsKey = "showAdsWhenLicensed"
     private static let holdingsKey = "stockHoldings"
     private static let showHoldingsKey = "showHoldings"
+    private static let rotatingSymbolsKey = "rotatingSymbols"
+    private static let rotationEnabledKey = "rotationEnabled"
+    private static let rotationIntervalKey = "rotationInterval"
 
     // Legacy key for migration
     private static let legacySymbolsKey = "watchedSymbols"
@@ -238,6 +241,34 @@ class AppSettings: ObservableObject {
             UserDefaults.standard.set(showGraph, forKey: Self.showGraphKey)
         }
     }
+
+    /// Rotating tickers in menu bar (up to 5)
+    @Published var rotatingSymbols: [String] {
+        didSet {
+            UserDefaults.standard.set(rotatingSymbols, forKey: Self.rotatingSymbolsKey)
+        }
+    }
+
+    @Published var rotationEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(rotationEnabled, forKey: Self.rotationEnabledKey)
+        }
+    }
+
+    @Published var rotationInterval: TimeInterval {
+        didSet {
+            UserDefaults.standard.set(rotationInterval, forKey: Self.rotationIntervalKey)
+        }
+    }
+
+    static let rotationIntervals: [(label: String, seconds: TimeInterval)] = [
+        ("3 seconds", 3),
+        ("5 seconds", 5),
+        ("10 seconds", 10),
+        ("15 seconds", 15),
+        ("30 seconds", 30),
+        ("60 seconds", 60),
+    ]
 
     @Published var showAdsWhenLicensed: Bool {
         didSet {
@@ -341,6 +372,10 @@ class AppSettings: ObservableObject {
         self.colorMode = TickerColorMode(rawValue: UserDefaults.standard.integer(forKey: Self.colorModeKey)) ?? .colored
         self.detailLevel = DropdownDetailLevel(rawValue: UserDefaults.standard.integer(forKey: Self.detailLevelKey)) ?? .detailed
         self.showGraph = UserDefaults.standard.object(forKey: Self.showGraphKey) == nil ? true : UserDefaults.standard.bool(forKey: Self.showGraphKey)
+        self.rotatingSymbols = UserDefaults.standard.stringArray(forKey: Self.rotatingSymbolsKey) ?? []
+        self.rotationEnabled = UserDefaults.standard.bool(forKey: Self.rotationEnabledKey)
+        let storedRotation = UserDefaults.standard.double(forKey: Self.rotationIntervalKey)
+        self.rotationInterval = storedRotation > 0 ? storedRotation : 5
         self.showAdsWhenLicensed = UserDefaults.standard.bool(forKey: Self.showAdsKey)
         if let holdingsData = UserDefaults.standard.data(forKey: Self.holdingsKey),
            let decoded = try? JSONDecoder().decode([String: Double].self, from: holdingsData) {
