@@ -153,10 +153,11 @@ class UpdateService: ObservableObject {
 
     private func installFromDMG(_ dmgURL: URL) {
         let fileManager = FileManager.default
-        let downloadsDir = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-        let destDMG = downloadsDir.appendingPathComponent("Tickr-update.dmg")
+        let tmpDir = fileManager.temporaryDirectory
+        let destDMG = tmpDir.appendingPathComponent("Tickr-update.dmg")
+        let updaterScript = tmpDir.appendingPathComponent("tickr_updater.sh")
 
-        // Copy DMG to Downloads
+        // Copy DMG to temp
         try? fileManager.removeItem(at: destDMG)
         do {
             try fileManager.copyItem(at: dmgURL, to: destDMG)
@@ -165,46 +166,90 @@ class UpdateService: ObservableObject {
             return
         }
 
-        // Mount DMG, copy app, unmount, relaunch
+        // Get the current app's path and PID
+        let appPath = Bundle.main.bundlePath
+        let appInstallPath = appPath.isEmpty ? "/Applications/Tickr.app" : appPath
+        let pid = ProcessInfo.processInfo.processIdentifier
+
+        // Write the updater script
         let script = """
-        do shell script "
-            # Mount DMG
-            MOUNT_OUTPUT=$(hdiutil attach '\(destDMG.path)' -nobrowse 2>&1)
-            MOUNT_POINT=$(echo \\"$MOUNT_OUTPUT\\" | grep '/Volumes/' | sed 's/.*\\(\\/Volumes\\/.*\\)/\\1/' | head -1 | xargs)
+        #!/bin/bash
+        # Tickr Updater — runs as external process after app quits
 
-            if [ -z \\"$MOUNT_POINT\\" ]; then
-                exit 1
+        DMG_PATH="\(destDMG.path)"
+        APP_INSTALL_PATH="\(appInstallPath)"
+        APP_PID=\(pid)
+
+        # Wait for the app to quit (up to 10 seconds)
+        for i in $(seq 1 20); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+                break
             fi
+            sleep 0.5
+        done
 
-            # Copy app to Applications
-            rm -rf /Applications/Tickr.app
-            cp -R \\"$MOUNT_POINT/Tickr.app\\" /Applications/Tickr.app
+        # Force kill if still running
+        kill -9 "$APP_PID" 2>/dev/null
+        sleep 0.5
 
-            # Unmount
-            hdiutil detach \\"$MOUNT_POINT\\" 2>/dev/null
+        # Mount DMG
+        MOUNT_OUTPUT=$(hdiutil attach "$DMG_PATH" -nobrowse -noverify 2>&1)
+        MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep '/Volumes/' | sed 's/.*\\(\\/Volumes\\/.*\\)/\\1/' | head -1 | xargs)
 
-            # Clean up
-            rm -f '\(destDMG.path)'
+        if [ -z "$MOUNT_POINT" ]; then
+            # Fallback: open DMG for manual install
+            open "$DMG_PATH"
+            exit 1
+        fi
 
-            # Relaunch
-            sleep 1
-            open /Applications/Tickr.app
-        "
+        # Find the .app in the mounted volume
+        NEW_APP=$(find "$MOUNT_POINT" -maxdepth 1 -name "*.app" | head -1)
+        if [ -z "$NEW_APP" ]; then
+            hdiutil detach "$MOUNT_POINT" 2>/dev/null
+            open "$DMG_PATH"
+            exit 1
+        fi
+
+        # Remove old app and copy new one
+        rm -rf "$APP_INSTALL_PATH"
+        cp -R "$NEW_APP" "$APP_INSTALL_PATH"
+
+        # Unmount and clean up
+        hdiutil detach "$MOUNT_POINT" 2>/dev/null
+        rm -f "$DMG_PATH"
+
+        # Relaunch
+        open "$APP_INSTALL_PATH"
+
+        # Clean up this script
+        rm -f "\(updaterScript.path)"
         """
 
-        let appleScript = NSAppleScript(source: script)
-        var error: NSDictionary?
-        appleScript?.executeAndReturnError(&error)
+        do {
+            try script.write(to: updaterScript, atomically: true, encoding: .utf8)
+            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: updaterScript.path)
+        } catch {
+            errorMessage = "Failed to create updater: \(error.localizedDescription)"
+            return
+        }
 
-        if error != nil {
-            // Fallback: just open the DMG for manual install
-            errorMessage = "Auto-install failed. Opening DMG for manual install."
+        // Launch the updater script as a detached process
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [updaterScript.path]
+        process.standardOutput = nil
+        process.standardError = nil
+
+        do {
+            try process.run()
+        } catch {
+            errorMessage = "Failed to launch updater: \(error.localizedDescription)"
             NSWorkspace.shared.open(destDMG)
             return
         }
 
-        // Quit current instance (new one will launch from the script)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        // Quit the app — the updater script takes over
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             NSApp.terminate(nil)
         }
     }
