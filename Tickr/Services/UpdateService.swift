@@ -171,58 +171,87 @@ class UpdateService: ObservableObject {
         let appInstallPath = appPath.isEmpty ? "/Applications/Tickr.app" : appPath
         let pid = ProcessInfo.processInfo.processIdentifier
 
-        // Write the updater script
+        let logPath = tmpDir.appendingPathComponent("tickr_updater.log").path
+
+        // Write the updater script — self-daemonizing via nohup re-exec
         let script = """
         #!/bin/bash
-        # Tickr Updater — runs as external process after app quits
+        # Tickr Updater
+
+        LOG="\(logPath)"
+
+        # Re-exec detached from parent if not already
+        if [ "$TICKR_DETACHED" != "1" ]; then
+            export TICKR_DETACHED=1
+            nohup "$0" "$@" > "$LOG" 2>&1 &
+            disown
+            exit 0
+        fi
+
+        echo "=== Tickr updater started at $(date) ==="
 
         DMG_PATH="\(destDMG.path)"
         APP_INSTALL_PATH="\(appInstallPath)"
         APP_PID=\(pid)
 
-        # Wait for the app to quit (up to 10 seconds)
+        echo "DMG: $DMG_PATH"
+        echo "App: $APP_INSTALL_PATH"
+        echo "PID: $APP_PID"
+
+        # Wait for the app to quit
         for i in $(seq 1 20); do
             if ! kill -0 "$APP_PID" 2>/dev/null; then
+                echo "App quit after ${i} checks"
                 break
             fi
             sleep 0.5
         done
-
-        # Force kill if still running
         kill -9 "$APP_PID" 2>/dev/null
-        sleep 0.5
+        sleep 1
 
         # Mount DMG
+        echo "Mounting DMG..."
         MOUNT_OUTPUT=$(hdiutil attach "$DMG_PATH" -nobrowse -noverify 2>&1)
+        echo "$MOUNT_OUTPUT"
         MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep '/Volumes/' | sed 's/.*\\(\\/Volumes\\/.*\\)/\\1/' | head -1 | xargs)
 
         if [ -z "$MOUNT_POINT" ]; then
-            # Fallback: open DMG for manual install
+            echo "ERROR: Failed to mount DMG"
             open "$DMG_PATH"
             exit 1
         fi
 
-        # Find the .app in the mounted volume
+        echo "Mounted at: $MOUNT_POINT"
+
         NEW_APP=$(find "$MOUNT_POINT" -maxdepth 1 -name "*.app" | head -1)
         if [ -z "$NEW_APP" ]; then
+            echo "ERROR: No .app found in DMG"
             hdiutil detach "$MOUNT_POINT" 2>/dev/null
             open "$DMG_PATH"
             exit 1
         fi
 
-        # Remove old app and copy new one
-        rm -rf "$APP_INSTALL_PATH"
-        cp -R "$NEW_APP" "$APP_INSTALL_PATH"
+        echo "New app: $NEW_APP"
 
-        # Unmount and clean up
+        # Replace old app
+        echo "Removing old app..."
+        rm -rf "$APP_INSTALL_PATH"
+        echo "Copying new app..."
+        cp -R "$NEW_APP" "$APP_INSTALL_PATH"
+        COPY_RESULT=$?
+
+        # Unmount
         hdiutil detach "$MOUNT_POINT" 2>/dev/null
         rm -f "$DMG_PATH"
 
-        # Relaunch
-        open "$APP_INSTALL_PATH"
+        if [ $COPY_RESULT -ne 0 ]; then
+            echo "ERROR: Copy failed"
+            exit 1
+        fi
 
-        # Clean up this script
-        rm -f "\(updaterScript.path)"
+        echo "Relaunching..."
+        open "$APP_INSTALL_PATH"
+        echo "=== Update complete ==="
         """
 
         do {
@@ -233,12 +262,12 @@ class UpdateService: ObservableObject {
             return
         }
 
-        // Launch the updater script as a detached process
+        // Launch via /usr/bin/open with a shell wrapper to ensure detachment
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = [updaterScript.path]
-        process.standardOutput = nil
-        process.standardError = nil
+        process.standardOutput = FileHandle(forWritingAtPath: logPath) ?? FileHandle.nullDevice
+        process.standardError = FileHandle(forWritingAtPath: logPath) ?? FileHandle.nullDevice
 
         do {
             try process.run()
@@ -248,8 +277,8 @@ class UpdateService: ObservableObject {
             return
         }
 
-        // Quit the app — the updater script takes over
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        // Quit the app — updater takes over. Longer delay to let script detach.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             NSApp.terminate(nil)
         }
     }
