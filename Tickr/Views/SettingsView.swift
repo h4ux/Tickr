@@ -18,198 +18,40 @@ struct SettingsView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 8)
 
+            TabView {
+                appearanceTab
+                    .tabItem { Label("Appearance", systemImage: "paintpalette") }
+
+                generalTab
+                    .tabItem { Label("General", systemImage: "gearshape") }
+
+                licenseTab
+                    .tabItem { Label("License", systemImage: "key.fill") }
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+        }
+    }
+
+    // MARK: - Tabs
+
+    @ViewBuilder
+    private var appearanceTab: some View {
+        VStack(spacing: 0) {
             Form {
-                // Menu Bar Appearance
-                Section("Menu Bar Appearance") {
-                    Picker("Display:", selection: $settings.displayFormat) {
-                        ForEach(TickerDisplayFormat.allCases, id: \.rawValue) { format in
-                            Text(format.label).tag(format)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    Picker("Trend indicator:", selection: $settings.trendStyle) {
-                        ForEach(TickerTrendStyle.allCases, id: \.rawValue) { style in
-                            Text(style.label).tag(style)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    Picker("Color:", selection: $settings.colorMode) {
-                        ForEach(TickerColorMode.allCases, id: \.rawValue) { mode in
-                            Text(mode.label).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    Picker("Dropdown detail:", selection: $settings.detailLevel) {
-                        ForEach(DropdownDetailLevel.allCases, id: \.rawValue) { level in
-                            Text(level.label).tag(level)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    Toggle("Show 1-month chart for primary ticker", isOn: $settings.showGraph)
-
-                    Toggle("Show portfolio holdings value", isOn: $settings.showHoldings)
-
-                    // Primary symbol picker
-                    Picker("Menu bar ticker:", selection: $settings.primarySymbol) {
-                        ForEach(settings.allSymbols, id: \.self) { symbol in
-                            HStack {
-                                Text(symbol)
-                                if let q = stockService.quote(for: symbol) {
-                                    Text("- \(q.shortCompanyName)")
-                                        .foregroundColor(.secondary)
-                                }
-                            }.tag(symbol)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    // Rotation
-                    RotationSettingsView()
-
-                    // Live preview
-                    HStack {
-                        Text("Preview:")
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text(previewText)
-                            .font(.system(.body, design: .monospaced))
-                            .fontWeight(.medium)
-                            .foregroundColor(previewColor)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color(nsColor: .windowBackgroundColor))
-                            .cornerRadius(4)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                            )
-                    }
-                }
-
-                // Refresh interval
-                Section("Refresh Interval") {
-                    Picker("Update every:", selection: $settings.refreshInterval) {
-                        ForEach(AppSettings.refreshIntervals, id: \.seconds) { interval in
-                            Text(interval.label).tag(interval.seconds)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-
-                // License
-                LicenseSection()
-
-                // Updates
-                UpdateSection()
-
-                // Startup
-                LaunchAtLoginSection()
-
-                // Analytics
-                AnalyticsSection()
-
-                // Suggestions
+                menuBarAppearanceSection
                 SuggestionsSection()
-
-                // Tickers & Categories
-                Section("Tickers & Categories (\(settings.totalSymbolCount) symbols)") {
-                    // Add single ticker
-                    HStack {
-                        TextField("Add ticker (e.g. AAPL)", text: $newSymbol)
-                            .textFieldStyle(.roundedBorder)
-                            .onSubmit { addSingleTicker() }
-
-                        Button("Add Ticker") { addSingleTicker() }
-                            .disabled(newSymbol.trimmingCharacters(in: .whitespaces).isEmpty)
-
-                        Button(action: { showAddCategory.toggle() }) {
-                            Image(systemName: "folder.badge.plus")
-                        }
-                        .help("Add category")
-                    }
-
-                    if showError {
-                        Text(errorText)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-
-                    // Add category inline
-                    if showAddCategory {
-                        HStack {
-                            Picker("", selection: $newCategoryIcon) {
-                                ForEach(AppSettings.categoryIcons, id: \.self) { icon in
-                                    Image(systemName: icon).tag(icon)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .frame(width: 60)
-
-                            TextField("Category name", text: $newCategoryName)
-                                .textFieldStyle(.roundedBorder)
-                                .onSubmit { addCategory() }
-
-                            Button("Create") { addCategory() }
-                                .disabled(newCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
-
-                            Button(action: { showAddCategory = false }) {
-                                Image(systemName: "xmark.circle")
-                                    .foregroundColor(.secondary)
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                        .padding(.vertical, 2)
-                    }
-
-                    // Items list
-                    List {
-                        ForEach(Array(settings.items.enumerated()), id: \.element.id) { index, item in
-                            switch item.kind {
-                            case .single(let symbol):
-                                SingleTickerRow(
-                                    symbol: symbol,
-                                    isPrimary: symbol == settings.primarySymbol,
-                                    onSetPrimary: { settings.primarySymbol = symbol },
-                                    onDelete: { settings.removeItem(at: IndexSet(integer: index)) }
-                                )
-                            case .category(let name, let icon, let symbols):
-                                CategorySettingsRow(
-                                    itemId: item.id,
-                                    name: name,
-                                    icon: icon,
-                                    symbols: symbols,
-                                    onDelete: { settings.removeItem(at: IndexSet(integer: index)) }
-                                )
-                            }
-                        }
-                        .onDelete { indices in
-                            settings.removeItem(at: indices)
-                        }
-                        .onMove { from, to in
-                            var updated = settings.items
-                            updated.move(fromOffsets: from, toOffset: to)
-                            settings.items = updated
-                        }
-                    }
-                    .frame(minHeight: 200)
-                }
+                tickersCategoriesSection
             }
             .formStyle(.grouped)
-            .padding(.horizontal, 8)
 
-            // Footer
             HStack {
                 Text("Click ★ to set menu bar ticker  •  Drag to reorder")
                     .font(.caption2)
                     .foregroundColor(.secondary)
                 Spacer()
                 if stockService.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.5)
+                    ProgressView().scaleEffect(0.5)
                 }
                 Button(action: { stockService.fetchQuotes() }) {
                     Image(systemName: "arrow.clockwise")
@@ -221,6 +63,186 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
+        }
+    }
+
+    @ViewBuilder
+    private var generalTab: some View {
+        Form {
+            Section("Refresh Interval") {
+                Picker("Update every:", selection: $settings.refreshInterval) {
+                    ForEach(AppSettings.refreshIntervals, id: \.seconds) { interval in
+                        Text(interval.label).tag(interval.seconds)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+            LaunchAtLoginSection()
+            UpdateSection()
+            AnalyticsSection()
+        }
+        .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private var licenseTab: some View {
+        Form {
+            LicenseSection()
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Sections
+
+    @ViewBuilder
+    private var menuBarAppearanceSection: some View {
+        Section("Menu Bar Appearance") {
+            Picker("Display:", selection: $settings.displayFormat) {
+                ForEach(TickerDisplayFormat.allCases, id: \.rawValue) { format in
+                    Text(format.label).tag(format)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Trend indicator:", selection: $settings.trendStyle) {
+                ForEach(TickerTrendStyle.allCases, id: \.rawValue) { style in
+                    Text(style.label).tag(style)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Color:", selection: $settings.colorMode) {
+                ForEach(TickerColorMode.allCases, id: \.rawValue) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Dropdown detail:", selection: $settings.detailLevel) {
+                ForEach(DropdownDetailLevel.allCases, id: \.rawValue) { level in
+                    Text(level.label).tag(level)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Toggle("Show 1-month chart for primary ticker", isOn: $settings.showGraph)
+
+            Toggle("Show portfolio holdings value", isOn: $settings.showHoldings)
+
+            Picker("Menu bar ticker:", selection: $settings.primarySymbol) {
+                ForEach(settings.allSymbols, id: \.self) { symbol in
+                    HStack {
+                        Text(symbol)
+                        if let q = stockService.quote(for: symbol) {
+                            Text("- \(q.shortCompanyName)")
+                                .foregroundColor(.secondary)
+                        }
+                    }.tag(symbol)
+                }
+            }
+            .pickerStyle(.menu)
+
+            RotationSettingsView()
+
+            HStack {
+                Text("Preview:")
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text(previewText)
+                    .font(.system(.body, design: .monospaced))
+                    .fontWeight(.medium)
+                    .foregroundColor(previewColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .cornerRadius(4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                    )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tickersCategoriesSection: some View {
+        Section("Tickers & Categories (\(settings.totalSymbolCount) symbols)") {
+            HStack {
+                TextField("Add ticker (e.g. AAPL)", text: $newSymbol)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { addSingleTicker() }
+
+                Button("Add Ticker") { addSingleTicker() }
+                    .disabled(newSymbol.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                Button(action: { showAddCategory.toggle() }) {
+                    Image(systemName: "folder.badge.plus")
+                }
+                .help("Add category")
+            }
+
+            if showError {
+                Text(errorText)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
+            if showAddCategory {
+                HStack {
+                    Picker("", selection: $newCategoryIcon) {
+                        ForEach(AppSettings.categoryIcons, id: \.self) { icon in
+                            Image(systemName: icon).tag(icon)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 60)
+
+                    TextField("Category name", text: $newCategoryName)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { addCategory() }
+
+                    Button("Create") { addCategory() }
+                        .disabled(newCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                    Button(action: { showAddCategory = false }) {
+                        Image(systemName: "xmark.circle")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.vertical, 2)
+            }
+
+            List {
+                ForEach(Array(settings.items.enumerated()), id: \.element.id) { index, item in
+                    switch item.kind {
+                    case .single(let symbol):
+                        SingleTickerRow(
+                            symbol: symbol,
+                            isPrimary: symbol == settings.primarySymbol,
+                            onSetPrimary: { settings.primarySymbol = symbol },
+                            onDelete: { settings.removeItem(at: IndexSet(integer: index)) }
+                        )
+                    case .category(let name, let icon, let symbols):
+                        CategorySettingsRow(
+                            itemId: item.id,
+                            name: name,
+                            icon: icon,
+                            symbols: symbols,
+                            onDelete: { settings.removeItem(at: IndexSet(integer: index)) }
+                        )
+                    }
+                }
+                .onDelete { indices in
+                    settings.removeItem(at: indices)
+                }
+                .onMove { from, to in
+                    var updated = settings.items
+                    updated.move(fromOffsets: from, toOffset: to)
+                    settings.items = updated
+                }
+            }
+            .frame(minHeight: 200)
         }
     }
 

@@ -11,6 +11,7 @@ class StatusBarController {
     private var settingsWindow: NSWindow?
     private var rotationTimer: Timer?
     private var rotationIndex = 0
+    private var eventMonitor: Any?
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -138,16 +139,31 @@ class StatusBarController {
 
     @objc private func togglePopover() {
         if popover.isShown {
-            popover.performClose(nil)
+            closePopover()
         } else if let button = statusItem.button {
             stockService.fetchQuotes()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
+
+            // Belt-and-suspenders: close popover on any click outside our app.
+            // `.transient` handles most cases but can miss clicks on the desktop.
+            eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                self?.closePopover()
+            }
+        }
+    }
+
+    private func closePopover() {
+        popover.performClose(nil)
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
         }
     }
 
     private func openSettings() {
-        popover.performClose(nil)
+        closePopover()
+        UpdateService.shared.checkForUpdates()
 
         if let window = settingsWindow, window.isVisible {
             window.makeKeyAndOrderFront(nil)
