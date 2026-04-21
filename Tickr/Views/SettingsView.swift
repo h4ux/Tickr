@@ -106,6 +106,9 @@ struct SettingsView: View {
                 // Updates
                 UpdateSection()
 
+                // Startup
+                LaunchAtLoginSection()
+
                 // Analytics
                 AnalyticsSection()
 
@@ -954,6 +957,99 @@ struct UpdateSection: View {
         } header: {
             Text("Updates")
         }
+    }
+}
+
+// MARK: - Launch at Login Section
+
+struct LaunchAtLoginSection: View {
+    @ObservedObject private var launcher = LaunchAtLoginService.shared
+    @State private var showHelp = false
+
+    var body: some View {
+        Section {
+            HStack {
+                Toggle("Launch Tickr at login", isOn: Binding(
+                    get: { launcher.isEnabled },
+                    set: { launcher.setEnabled($0) }
+                ))
+                Button(action: { showHelp.toggle() }) {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.borderless)
+                .help("How Launch at Login works")
+            }
+
+            // Status line
+            HStack {
+                Text("Status:")
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text(launcher.statusDescription)
+                    .font(.caption)
+                    .foregroundColor(launcher.isEnabled ? Color(nsColor: .systemGreen) : .secondary)
+            }
+
+            // Approval required — explain what to do
+            if launcher.needsApproval {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("Approval needed in System Settings")
+                            .font(.system(.caption, weight: .semibold))
+                    }
+                    Text("macOS needs your permission to let Tickr launch automatically. Open System Settings and enable Tickr under Login Items.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Button("Open Login Items Settings") {
+                        launcher.openLoginItemsSettings()
+                    }
+                    .font(.caption)
+                }
+                .padding(.vertical, 4)
+            }
+
+            // Error
+            if let error = launcher.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
+            // Help / explainer
+            if showHelp {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("How it works")
+                        .font(.system(.caption, weight: .semibold))
+                    Text("Turning this on registers Tickr as a login item so it starts automatically when you log in to your Mac.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+
+                    Text("If something goes wrong")
+                        .font(.system(.caption, weight: .semibold))
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Label("Open System Settings → General → Login Items", systemImage: "1.circle")
+                        Label("Find \"Tickr\" under \"Open at Login\" and toggle it on", systemImage: "2.circle")
+                        Label("If Tickr isn't listed, toggle this switch off and on again", systemImage: "3.circle")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
+                    Button("Open Login Items Settings") {
+                        launcher.openLoginItemsSettings()
+                    }
+                    .font(.caption)
+                    .padding(.top, 2)
+                }
+                .padding(.vertical, 4)
+            }
+        } header: {
+            Text("Startup")
+        }
+        .onAppear { launcher.refresh() }
     }
 }
 
