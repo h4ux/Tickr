@@ -99,6 +99,18 @@ enum CategorySortOrder: Int, CaseIterable {
     }
 }
 
+enum RotationMode: String, CaseIterable {
+    case swap      // change shown ticker every N seconds
+    case scroll    // continuously scroll all tickers across the menu bar
+
+    var label: String {
+        switch self {
+        case .swap:   return "Change every interval"
+        case .scroll: return "Scroll continuously"
+        }
+    }
+}
+
 enum DropdownDetailLevel: Int, CaseIterable {
     case compact = 0
     case standard = 1
@@ -177,6 +189,7 @@ class AppSettings: ObservableObject {
     private static let rotatingSymbolsKey = "rotatingSymbols"
     private static let rotationEnabledKey = "rotationEnabled"
     private static let rotationIntervalKey = "rotationInterval"
+    private static let rotationModeKey = "rotationMode"
 
     // Legacy key for migration
     private static let legacySymbolsKey = "watchedSymbols"
@@ -258,6 +271,12 @@ class AppSettings: ObservableObject {
     @Published var rotationInterval: TimeInterval {
         didSet {
             UserDefaults.standard.set(rotationInterval, forKey: Self.rotationIntervalKey)
+        }
+    }
+
+    @Published var rotationMode: RotationMode {
+        didSet {
+            UserDefaults.standard.set(rotationMode.rawValue, forKey: Self.rotationModeKey)
         }
     }
 
@@ -376,6 +395,7 @@ class AppSettings: ObservableObject {
         self.rotationEnabled = UserDefaults.standard.bool(forKey: Self.rotationEnabledKey)
         let storedRotation = UserDefaults.standard.double(forKey: Self.rotationIntervalKey)
         self.rotationInterval = storedRotation > 0 ? storedRotation : 5
+        self.rotationMode = RotationMode(rawValue: UserDefaults.standard.string(forKey: Self.rotationModeKey) ?? "") ?? .swap
         self.showAdsWhenLicensed = UserDefaults.standard.bool(forKey: Self.showAdsKey)
         if let holdingsData = UserDefaults.standard.data(forKey: Self.holdingsKey),
            let decoded = try? JSONDecoder().decode([String: Double].self, from: holdingsData) {

@@ -11,6 +11,9 @@ class StatusBarController {
     private var settingsWindow: NSWindow?
     private var rotationTimer: Timer?
     private var rotationIndex = 0
+    private var scrollOffset = 0
+    private let scrollTickInterval: TimeInterval = 0.18
+    private let scrollSeparator = "  •  "
     private var eventMonitor: Any?
 
     init() {
@@ -53,9 +56,9 @@ class StatusBarController {
 
         // When rotation settings change, restart rotation timer
         settings.$rotationEnabled
-            .combineLatest(settings.$rotationInterval, settings.$rotatingSymbols)
+            .combineLatest(settings.$rotationInterval, settings.$rotatingSymbols, settings.$rotationMode)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _, _, _ in
+            .sink { [weak self] _, _, _, _ in
                 self?.restartRotationTimer()
             }
             .store(in: &cancellables)
@@ -77,7 +80,15 @@ class StatusBarController {
         return settings.primarySymbol
     }
 
+    private var isScrolling: Bool {
+        settings.rotationEnabled && settings.rotatingSymbols.count > 1 && settings.rotationMode == .scroll
+    }
+
     private func updateCurrentDisplay() {
+        if isScrolling {
+            updateScrollDisplay()
+            return
+        }
         let symbol = currentDisplaySymbol
         let quote = stockService.quotes.first { $0.symbol == symbol }
         updateMenuBarDisplay(quote)
@@ -123,16 +134,90 @@ class StatusBarController {
         rotationTimer?.invalidate()
         rotationTimer = nil
 
-        guard settings.rotationEnabled && settings.rotatingSymbols.count > 1 else { return }
-
-        rotationIndex = 0
-        let t = Timer(timeInterval: settings.rotationInterval, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            self.rotationIndex += 1
-            self.updateCurrentDisplay()
+        guard settings.rotationEnabled && settings.rotatingSymbols.count > 1 else {
+            // Rotation disabled — show the primary ticker.
+            updateCurrentDisplay()
+            return
         }
-        RunLoop.main.add(t, forMode: .common)
-        rotationTimer = t
+
+        switch settings.rotationMode {
+        case .swap:
+            rotationIndex = 0
+            let t = Timer(timeInterval: settings.rotationInterval, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                self.rotationIndex += 1
+                self.updateCurrentDisplay()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            rotationTimer = t
+            updateCurrentDisplay()
+
+        case .scroll:
+            scrollOffset = 0
+            let t = Timer(timeInterval: scrollTickInterval, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                self.scrollOffset += 1
+                self.updateScrollDisplay()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            rotationTimer = t
+            updateScrollDisplay()
+        }
+    }
+
+    // MARK: - Scroll (marquee) mode
+
+    private func updateScrollDisplay() {
+        guard let button = statusItem.button else { return }
+
+        let full = buildScrollAttributedString()
+        guard full.length > 0 else {
+            button.title = "Tickr"
+            return
+        }
+
+        // Double the string so the visible window can wrap seamlessly.
+        let doubled = NSMutableAttributedString(attributedString: full)
+        doubled.append(full)
+
+        let totalLen = full.length
+        let windowSize = min(40, totalLen)
+        let offset = scrollOffset % max(totalLen, 1)
+        button.attributedTitle = doubled.attributedSubstring(from: NSRange(location: offset, length: windowSize))
+    }
+
+    private func buildScrollAttributedString() -> NSAttributedString {
+        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
+        let sepColor = NSColor.secondaryLabelColor
+        let result = NSMutableAttributedString()
+
+        let symbols = settings.rotatingSymbols
+        for (i, symbol) in symbols.enumerated() {
+            let segmentText: String
+            let color: NSColor
+            if let quote = stockService.quotes.first(where: { $0.symbol == symbol }) {
+                segmentText = quote.menuBarText(format: settings.displayFormat, trend: settings.trendStyle)
+                switch settings.colorMode {
+                case .colored: color = quote.isUp ? .systemGreen : .systemRed
+                case .grey:    color = .labelColor
+                }
+            } else {
+                segmentText = "\(symbol) ..."
+                color = sepColor
+            }
+            result.append(NSAttributedString(string: segmentText, attributes: [
+                .foregroundColor: color,
+                .font: font
+            ]))
+            // Separator after every segment (including last, for a clean wrap-around).
+            if i < symbols.count - 1 || symbols.count > 0 {
+                result.append(NSAttributedString(string: scrollSeparator, attributes: [
+                    .foregroundColor: sepColor,
+                    .font: font
+                ]))
+            }
+        }
+        return result
     }
 
     // MARK: - Popover

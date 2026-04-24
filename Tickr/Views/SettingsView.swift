@@ -578,12 +578,21 @@ struct RotationSettingsView: View {
             Toggle("Rotate tickers in menu bar", isOn: $settings.rotationEnabled)
 
             if settings.rotationEnabled {
-                Picker("Rotate every:", selection: $settings.rotationInterval) {
-                    ForEach(AppSettings.rotationIntervals, id: \.seconds) { interval in
-                        Text(interval.label).tag(interval.seconds)
+                Picker("Mode:", selection: $settings.rotationMode) {
+                    ForEach(RotationMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.label).tag(mode)
                     }
                 }
                 .pickerStyle(.menu)
+
+                if settings.rotationMode == .swap {
+                    Picker("Rotate every:", selection: $settings.rotationInterval) {
+                        ForEach(AppSettings.rotationIntervals, id: \.seconds) { interval in
+                            Text(interval.label).tag(interval.seconds)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
 
                 // Current rotation list
                 HStack {
