@@ -38,7 +38,8 @@ class SuggestionsService: ObservableObject {
         {"name":"Healthcare","icon":"cross.case","symbols":["JNJ","UNH","PFE","ABBV","MRK","LLY"]},
         {"name":"Gaming","icon":"gamecontroller","symbols":["ATVI","EA","TTWO","RBLX","U"]},
         {"name":"Travel & Airlines","icon":"airplane","symbols":["DAL","UAL","LUV","AAL","ABNB","BKNG"]},
-        {"name":"Retail","icon":"cart","symbols":["WMT","COST","TGT","HD","LOW","AMZN"]}
+        {"name":"Retail","icon":"cart","symbols":["WMT","COST","TGT","HD","LOW","AMZN"]},
+        {"name":"Space","icon":"moon.stars","symbols":["RKLB","LUNR","ASTS","PL","IRDM","SPCE","BKSY","RDW"]}
         ]}
         """
 

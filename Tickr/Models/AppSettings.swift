@@ -198,7 +198,7 @@ class AppSettings: ObservableObject {
     static let categoryIcons = [
         "folder", "chart.line.uptrend.xyaxis", "laptopcomputer", "building.2",
         "cross.case", "bolt", "leaf", "car", "airplane", "banknote",
-        "globe", "cpu", "gamecontroller", "film", "cart",
+        "globe", "cpu", "gamecontroller", "film", "cart", "moon.stars",
     ]
     static let refreshIntervals: [(label: String, seconds: TimeInterval)] = [
         ("15 seconds", 15),

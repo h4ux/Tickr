@@ -27,6 +27,9 @@ struct SettingsView: View {
 
                 licenseTab
                     .tabItem { Label("License", systemImage: "key.fill") }
+
+                aboutTab
+                    .tabItem { Label("About", systemImage: "info.circle") }
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
@@ -90,6 +93,11 @@ struct SettingsView: View {
             LicenseSection()
         }
         .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private var aboutTab: some View {
+        AboutTab()
     }
 
     // MARK: - Sections
@@ -1328,5 +1336,74 @@ struct AnalyticsSection: View {
         } header: {
             Text("Analytics")
         }
+    }
+}
+
+// MARK: - About Tab
+
+struct AboutTab: View {
+    var body: some View {
+        VStack(spacing: 14) {
+            Spacer().frame(height: 8)
+
+            if let icon = NSImage(named: NSImage.applicationIconName) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 96, height: 96)
+            } else {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 64))
+                    .foregroundColor(.accentColor)
+            }
+
+            VStack(spacing: 2) {
+                Text("Tickr")
+                    .font(.system(size: 28, weight: .bold))
+                Text("Version \(UpdateService.currentVersion)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Text("Real-time stock prices in your menu bar.")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+
+            Divider().padding(.horizontal, 60)
+
+            VStack(spacing: 6) {
+                aboutLink(title: "View on GitHub",  systemImage: "chevron.left.forwardslash.chevron.right", url: "https://github.com/h4ux/Tickr")
+                aboutLink(title: "Report an Issue", systemImage: "exclamationmark.bubble",                  url: "https://github.com/h4ux/Tickr/issues")
+                aboutLink(title: "Visit Website",   systemImage: "globe",                                   url: "https://h4ux.com")
+            }
+
+            Spacer()
+
+            Text("Made with care by h4ux.")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .padding(.bottom, 6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func aboutLink(title: String, systemImage: String, url: String) -> some View {
+        Button {
+            if let u = URL(string: url) {
+                NSWorkspace.shared.open(u)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .frame(width: 16)
+                Text(title)
+                Image(systemName: "arrow.up.right")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .buttonStyle(.borderless)
     }
 }
