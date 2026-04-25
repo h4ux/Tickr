@@ -17,7 +17,10 @@ class SuggestionsService: ObservableObject {
 
     @Published var groups: [SuggestedGroup] = []
 
-    private static let remoteURL = "https://h4ux.com/tickr/stock.json"
+    private static let remoteEndpoints = [
+        "https://service.h4ux.com/suggestions",
+        "https://billowing-term-c225.alon-f46.workers.dev/suggestions",
+    ]
     private static let cacheKey = "cachedSuggestions"
 
     private init() {
@@ -53,26 +56,32 @@ class SuggestionsService: ObservableObject {
         }
     }
 
-    /// Fetch from remote URL, update cache and UI
+    /// Fetch from remote endpoints with fallback chain, update cache and UI
     private func fetchRemote() {
-        guard let url = URL(string: Self.remoteURL) else { return }
+        fetchFromEndpoint(index: 0)
+    }
+
+    private func fetchFromEndpoint(index: Int) {
+        guard index < Self.remoteEndpoints.count,
+              let url = URL(string: Self.remoteEndpoints[index]) else { return }
 
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 10
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
-            guard let data = data,
-                  let http = response as? HTTPURLResponse,
-                  http.statusCode == 200,
-                  let payload = try? JSONDecoder().decode(SuggestionsPayload.self, from: data),
-                  !payload.suggestions.isEmpty else { return }
+            guard let self = self else { return }
+            let http = response as? HTTPURLResponse
 
-            // Cache the remote response
-            UserDefaults.standard.set(data, forKey: Self.cacheKey)
-
-            DispatchQueue.main.async {
-                self?.groups = payload.suggestions
+            if let data = data, http?.statusCode == 200,
+               let payload = try? JSONDecoder().decode(SuggestionsPayload.self, from: data),
+               !payload.suggestions.isEmpty {
+                UserDefaults.standard.set(data, forKey: Self.cacheKey)
+                DispatchQueue.main.async {
+                    self.groups = payload.suggestions
+                }
+            } else {
+                self.fetchFromEndpoint(index: index + 1)
             }
         }.resume()
     }
