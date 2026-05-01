@@ -7,6 +7,9 @@ class NotificationService: NSObject, ObservableObject {
     static let shared = NotificationService()
 
     @Published var authorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published var alertSetting: UNNotificationSetting = .notSupported
+    @Published var soundSetting: UNNotificationSetting = .notSupported
+    @Published var notificationCenterSetting: UNNotificationSetting = .notSupported
     @Published var lastError: String?
 
     private let settings = AppSettings.shared
@@ -33,9 +36,22 @@ class NotificationService: NSObject, ObservableObject {
     func refreshStatus() {
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] s in
             DispatchQueue.main.async {
-                self?.authorizationStatus = s.authorizationStatus
+                guard let self = self else { return }
+                self.authorizationStatus = s.authorizationStatus
+                self.alertSetting = s.alertSetting
+                self.soundSetting = s.soundSetting
+                self.notificationCenterSetting = s.notificationCenterSetting
+                // Clear stale errors once we know notifications are usable.
+                if self.isAuthorized {
+                    self.lastError = nil
+                }
             }
         }
+    }
+
+    /// True only when authorization is granted AND alert banners are enabled.
+    var bannersEnabled: Bool {
+        isAuthorized && alertSetting == .enabled
     }
 
     /// Request permission. macOS prompts only once; subsequent calls return the saved decision.
@@ -86,10 +102,20 @@ class NotificationService: NSObject, ObservableObject {
         content.title = title
         content.body = body
         content.sound = .default
+        // Treat sub-second deliveries as time-sensitive on supported macOS so the system
+        // is more likely to show them as a banner instead of silently filing in NC.
+        if #available(macOS 12.0, *) {
+            content.interruptionLevel = .active
+        }
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { [weak self] error in
-            if let error = error {
-                DispatchQueue.main.async { self?.lastError = error.localizedDescription }
+            DispatchQueue.main.async {
+                if let error = error {
+                    self?.lastError = error.localizedDescription
+                }
+                // Refresh settings — `add()` errors are most often "alert style off",
+                // and reading settings tells us whether to nudge the user about it.
+                self?.refreshStatus()
             }
         }
     }

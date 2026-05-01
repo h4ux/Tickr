@@ -82,6 +82,32 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
+
+                HStack {
+                    Text("Last updated:")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    if stockService.isLoading {
+                        ProgressView().scaleEffect(0.5)
+                        Text("Refreshing…")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else if let last = stockService.lastUpdated {
+                        Text(last, formatter: updateTimeFormatter)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Never")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Button(action: { stockService.fetchQuotes() }) {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(stockService.isLoading)
+                    .help("Refresh now")
+                }
             }
             LaunchAtLoginSection()
             UpdateSection()
@@ -1449,6 +1475,17 @@ struct NotificationsTab: View {
                         .foregroundColor(notif.isAuthorized ? Color(nsColor: .systemGreen) : .secondary)
                 }
 
+                if notif.isAuthorized {
+                    HStack {
+                        Text("Banners:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(notif.alertSetting == .enabled ? "Enabled" : "Disabled")
+                            .font(.caption)
+                            .foregroundColor(notif.alertSetting == .enabled ? Color(nsColor: .systemGreen) : .orange)
+                    }
+                }
+
                 if notif.authorizationStatus == .denied {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 6) {
@@ -1466,12 +1503,23 @@ struct NotificationsTab: View {
                         .font(.caption)
                     }
                     .padding(.vertical, 4)
-                }
-
-                if let error = notif.lastError {
-                    Text(error)
+                } else if notif.isAuthorized && notif.alertSetting != .enabled {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text("Banners aren't shown — notifications go straight to Notification Center.")
+                                .font(.caption)
+                        }
+                        Text("Open System Settings → Notifications → Tickr and set the alert style to \"Banners\" or \"Alerts\".")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Button("Open Notification Settings") {
+                            notif.openSystemSettings()
+                        }
                         .font(.caption)
-                        .foregroundColor(.red)
+                    }
+                    .padding(.vertical, 4)
                 }
             }
 
