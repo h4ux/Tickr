@@ -42,7 +42,8 @@ class SuggestionsService: ObservableObject {
         {"name":"Gaming","icon":"gamecontroller","symbols":["ATVI","EA","TTWO","RBLX","U"]},
         {"name":"Travel & Airlines","icon":"airplane","symbols":["DAL","UAL","LUV","AAL","ABNB","BKNG"]},
         {"name":"Retail","icon":"cart","symbols":["WMT","COST","TGT","HD","LOW","AMZN"]},
-        {"name":"Space","icon":"moon.stars","symbols":["RKLB","LUNR","ASTS","PL","IRDM","SPCE","BKSY","RDW","LMT","BA","NOC","LHX"]}
+        {"name":"Space","icon":"moon.stars","symbols":["RKLB","LUNR","ASTS","PL","IRDM","SPCE","BKSY","RDW","LMT","BA","NOC","LHX"]},
+        {"name":"VanEck Space Innovators UCITS ETF","icon":"moon.stars","symbols":["PL","RKLB","VSAT","SATS","GSAT","ASTS","FLY","LUNR","MDA.TO","IRDM","9412.T","6285.TW","SESG.PA","012450.KS","MRO.L","DCO","NN","ETL.PA","AVIO.MI","RDW","BKSY","186A.T","GILT","464A.T","9348.T"]}
         ]}
         """
 

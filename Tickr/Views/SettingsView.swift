@@ -25,6 +25,9 @@ struct SettingsView: View {
                 generalTab
                     .tabItem { Label("General", systemImage: "gearshape") }
 
+                notificationsTab
+                    .tabItem { Label("Notifications", systemImage: "bell.badge") }
+
                 licenseTab
                     .tabItem { Label("License", systemImage: "key.fill") }
 
@@ -98,6 +101,11 @@ struct SettingsView: View {
     @ViewBuilder
     private var aboutTab: some View {
         AboutTab()
+    }
+
+    @ViewBuilder
+    private var notificationsTab: some View {
+        NotificationsTab()
     }
 
     // MARK: - Sections
@@ -1405,5 +1413,106 @@ struct AboutTab: View {
             }
         }
         .buttonStyle(.borderless)
+    }
+}
+
+// MARK: - Notifications Tab
+
+struct NotificationsTab: View {
+    @ObservedObject private var notif = NotificationService.shared
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        Form {
+            Section("Notifications") {
+                Toggle("Enable notifications", isOn: Binding(
+                    get: { settings.notificationsEnabled },
+                    set: { newValue in
+                        if newValue {
+                            // Only triggers the macOS prompt if status is .notDetermined.
+                            // Subsequent calls return the saved decision without prompting.
+                            notif.requestAuthorization { granted in
+                                settings.notificationsEnabled = granted
+                            }
+                        } else {
+                            settings.notificationsEnabled = false
+                        }
+                    }
+                ))
+
+                HStack {
+                    Text("Permission:")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(notif.statusDescription)
+                        .font(.caption)
+                        .foregroundColor(notif.isAuthorized ? Color(nsColor: .systemGreen) : .secondary)
+                }
+
+                if notif.authorizationStatus == .denied {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text("Notifications are denied for Tickr.")
+                                .font(.caption)
+                        }
+                        Text("Open System Settings → Notifications → Tickr and turn \"Allow Notifications\" on.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Button("Open Notification Settings") {
+                            notif.openSystemSettings()
+                        }
+                        .font(.caption)
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                if let error = notif.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+            }
+
+            if settings.notificationsEnabled && notif.isAuthorized {
+                Section("Alert me when…") {
+                    Toggle("A stock moves more than threshold", isOn: $settings.notifyOnPriceChangeEnabled)
+
+                    if settings.notifyOnPriceChangeEnabled {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Threshold:")
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text(String(format: "%.1f%%", settings.priceChangePercentThreshold))
+                                    .font(.system(.body, design: .monospaced, weight: .medium))
+                            }
+                            Slider(value: $settings.priceChangePercentThreshold, in: 0.5...20, step: 0.5)
+                            Text("Each ticker can fire at most once per day.")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                Section("Test") {
+                    HStack {
+                        Button(action: { notif.sendTestNotification() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "bell.fill")
+                                Text("Send Test Notification")
+                            }
+                        }
+                        Spacer()
+                        Text("Should appear in your Notification Center.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { notif.refreshStatus() }
     }
 }

@@ -46,6 +46,7 @@ swiftc \
     Tickr/Services/LicenseService.swift \
     Tickr/Services/AdService.swift \
     Tickr/Services/LaunchAtLoginService.swift \
+    Tickr/Services/NotificationService.swift \
     Tickr/Services/Secrets.swift \
     Tickr/Views/StatusBarController.swift \
     Tickr/Views/TickerDropdownView.swift \

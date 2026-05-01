@@ -190,6 +190,9 @@ class AppSettings: ObservableObject {
     private static let rotationEnabledKey = "rotationEnabled"
     private static let rotationIntervalKey = "rotationInterval"
     private static let rotationModeKey = "rotationMode"
+    private static let notificationsEnabledKey = "notificationsEnabled"
+    private static let notifyOnPriceChangeKey = "notifyOnPriceChange"
+    private static let priceChangeThresholdKey = "priceChangePercentThreshold"
 
     // Legacy key for migration
     private static let legacySymbolsKey = "watchedSymbols"
@@ -277,6 +280,24 @@ class AppSettings: ObservableObject {
     @Published var rotationMode: RotationMode {
         didSet {
             UserDefaults.standard.set(rotationMode.rawValue, forKey: Self.rotationModeKey)
+        }
+    }
+
+    @Published var notificationsEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(notificationsEnabled, forKey: Self.notificationsEnabledKey)
+        }
+    }
+
+    @Published var notifyOnPriceChangeEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(notifyOnPriceChangeEnabled, forKey: Self.notifyOnPriceChangeKey)
+        }
+    }
+
+    @Published var priceChangePercentThreshold: Double {
+        didSet {
+            UserDefaults.standard.set(priceChangePercentThreshold, forKey: Self.priceChangeThresholdKey)
         }
     }
 
@@ -396,6 +417,14 @@ class AppSettings: ObservableObject {
         let storedRotation = UserDefaults.standard.double(forKey: Self.rotationIntervalKey)
         self.rotationInterval = storedRotation > 0 ? storedRotation : 5
         self.rotationMode = RotationMode(rawValue: UserDefaults.standard.string(forKey: Self.rotationModeKey) ?? "") ?? .swap
+        self.notificationsEnabled = UserDefaults.standard.bool(forKey: Self.notificationsEnabledKey)
+        if UserDefaults.standard.object(forKey: Self.notifyOnPriceChangeKey) == nil {
+            self.notifyOnPriceChangeEnabled = true
+        } else {
+            self.notifyOnPriceChangeEnabled = UserDefaults.standard.bool(forKey: Self.notifyOnPriceChangeKey)
+        }
+        let storedThreshold = UserDefaults.standard.double(forKey: Self.priceChangeThresholdKey)
+        self.priceChangePercentThreshold = storedThreshold > 0 ? storedThreshold : 5.0
         self.showAdsWhenLicensed = UserDefaults.standard.bool(forKey: Self.showAdsKey)
         if let holdingsData = UserDefaults.standard.data(forKey: Self.holdingsKey),
            let decoded = try? JSONDecoder().decode([String: Double].self, from: holdingsData) {
