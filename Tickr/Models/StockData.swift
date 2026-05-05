@@ -71,7 +71,7 @@ struct StockQuote: Identifiable {
         return name
     }
 
-    func menuBarText(format: TickerDisplayFormat, trend: TickerTrendStyle) -> String {
+    func menuBarText(format: TickerDisplayFormat, trend: TickerTrendStyle, showMarketCap: Bool = false) -> String {
         var parts: [String] = []
 
         switch format {
@@ -106,6 +106,10 @@ struct StockQuote: Identifiable {
                 let sign = isUp ? "+" : "-"
                 parts.append("\(sign)\(String(format: "%.2f%%", abs(changePercent)))")
             }
+        }
+
+        if showMarketCap, let mc = self.marketCap, !mc.isEmpty {
+            parts.append(mc)
         }
 
         return parts.joined(separator: " ")

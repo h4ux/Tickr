@@ -193,6 +193,8 @@ class AppSettings: ObservableObject {
     private static let notificationsEnabledKey = "notificationsEnabled"
     private static let notifyOnPriceChangeKey = "notifyOnPriceChange"
     private static let priceChangeThresholdKey = "priceChangePercentThreshold"
+    private static let showMarketCapKey = "showMarketCap"
+    private static let menuBarMaxWidthKey = "menuBarMaxWidth"
 
     // Legacy key for migration
     private static let legacySymbolsKey = "watchedSymbols"
@@ -298,6 +300,19 @@ class AppSettings: ObservableObject {
     @Published var priceChangePercentThreshold: Double {
         didSet {
             UserDefaults.standard.set(priceChangePercentThreshold, forKey: Self.priceChangeThresholdKey)
+        }
+    }
+
+    @Published var showMarketCap: Bool {
+        didSet {
+            UserDefaults.standard.set(showMarketCap, forKey: Self.showMarketCapKey)
+        }
+    }
+
+    /// Menu bar width in points. 0 = auto (variable length).
+    @Published var menuBarMaxWidth: Double {
+        didSet {
+            UserDefaults.standard.set(menuBarMaxWidth, forKey: Self.menuBarMaxWidthKey)
         }
     }
 
@@ -425,6 +440,8 @@ class AppSettings: ObservableObject {
         }
         let storedThreshold = UserDefaults.standard.double(forKey: Self.priceChangeThresholdKey)
         self.priceChangePercentThreshold = storedThreshold > 0 ? storedThreshold : 5.0
+        self.showMarketCap = UserDefaults.standard.bool(forKey: Self.showMarketCapKey)
+        self.menuBarMaxWidth = UserDefaults.standard.double(forKey: Self.menuBarMaxWidthKey)
         self.showAdsWhenLicensed = UserDefaults.standard.bool(forKey: Self.showAdsKey)
         if let holdingsData = UserDefaults.standard.data(forKey: Self.holdingsKey),
            let decoded = try? JSONDecoder().decode([String: Double].self, from: holdingsData) {

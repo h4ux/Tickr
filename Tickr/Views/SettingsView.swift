@@ -171,6 +171,29 @@ struct SettingsView: View {
 
             Toggle("Show portfolio holdings value", isOn: $settings.showHoldings)
 
+            Toggle("Show market cap", isOn: $settings.showMarketCap)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Menu bar width:")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    if settings.menuBarMaxWidth <= 0 {
+                        Text("Auto")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("\(Int(settings.menuBarMaxWidth)) pt")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Slider(value: $settings.menuBarMaxWidth, in: 0...400, step: 10)
+                Text("0 = auto. When the text is wider than the limit, it scrolls.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
             Picker("Menu bar ticker:", selection: $settings.primarySymbol) {
                 ForEach(settings.allSymbols, id: \.self) { symbol in
                     HStack {
@@ -292,10 +315,10 @@ struct SettingsView: View {
 
     private var previewText: String {
         if let quote = stockService.primaryQuote {
-            return quote.menuBarText(format: settings.displayFormat, trend: settings.trendStyle)
+            return quote.menuBarText(format: settings.displayFormat, trend: settings.trendStyle, showMarketCap: settings.showMarketCap)
         }
         let sample = StockQuote(symbol: "AAPL", companyName: "Apple Inc.", price: 185.50, change: 2.30, changePercent: 1.25, previousClose: 183.20, dayHigh: 186.00, dayLow: 183.00, volume: 52_340_000, fiftyTwoWeekHigh: 199.62, fiftyTwoWeekLow: 124.17, currency: "USD", exchange: "NASDAQ", sector: "Technology", industry: "Consumer Electronics", marketCap: "3.76T")
-        return sample.menuBarText(format: settings.displayFormat, trend: settings.trendStyle)
+        return sample.menuBarText(format: settings.displayFormat, trend: settings.trendStyle, showMarketCap: settings.showMarketCap)
     }
 
     private var previewColor: Color {
