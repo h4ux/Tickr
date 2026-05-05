@@ -112,6 +112,23 @@ class StockService: ObservableObject {
     private var sectorCache: [String: (sector: String?, industry: String?)] = [:]
     private var marketCapCache: [String: String] = [:]
 
+    /// Splice late-arriving enrichment fields into the published quote for `symbol`.
+    /// Pass nil for fields that should be left untouched.
+    private func applyEnrichment(symbol: String, sector: String? = nil, industry: String? = nil, marketCap: String? = nil) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            guard let idx = self.quotes.firstIndex(where: { $0.symbol == symbol }) else { return }
+            let updated = self.quotes[idx].with(
+                sector: sector.map { Optional($0) },
+                industry: industry.map { Optional($0) },
+                marketCap: marketCap.map { Optional($0) }
+            )
+            var arr = self.quotes
+            arr[idx] = updated
+            self.quotes = arr
+        }
+    }
+
     private func fetchSingleQuote(symbol: String, completion: @escaping (Result<StockQuote, Error>) -> Void) {
         guard let encoded = symbol.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://query1.finance.yahoo.com/v8/finance/chart/\(encoded)?interval=1d&range=2d") else {
@@ -179,12 +196,18 @@ class StockService: ObservableObject {
                 )
                 completion(.success(quote))
 
-                // Fetch enrichment in background (cached for next refresh)
+                // Fetch enrichment in background. When it arrives, splice it into the
+                // currently-published quote so observers (e.g. menu bar) see it without
+                // waiting for the next refresh tick.
                 if cachedSector == nil {
-                    self?.fetchSectorInfo(symbol: symbol) { _, _ in }
+                    self?.fetchSectorInfo(symbol: symbol) { sector, industry in
+                        self?.applyEnrichment(symbol: symbol, sector: sector, industry: industry)
+                    }
                 }
                 if cachedMCap == nil {
-                    self?.fetchMarketCap(symbol: symbol, exchange: exchange) { _ in }
+                    self?.fetchMarketCap(symbol: symbol, exchange: exchange) { mcap in
+                        self?.applyEnrichment(symbol: symbol, marketCap: mcap)
+                    }
                 }
             } catch {
                 completion(.failure(error))

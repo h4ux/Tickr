@@ -114,6 +114,28 @@ struct StockQuote: Identifiable {
 
         return parts.joined(separator: " ")
     }
+
+    /// Return a copy with the given enrichment fields replaced.
+    func with(sector: String?? = nil, industry: String?? = nil, marketCap: String?? = nil) -> StockQuote {
+        StockQuote(
+            symbol: symbol,
+            companyName: companyName,
+            price: price,
+            change: change,
+            changePercent: changePercent,
+            previousClose: previousClose,
+            dayHigh: dayHigh,
+            dayLow: dayLow,
+            volume: volume,
+            fiftyTwoWeekHigh: fiftyTwoWeekHigh,
+            fiftyTwoWeekLow: fiftyTwoWeekLow,
+            currency: currency,
+            exchange: exchange,
+            sector: sector ?? self.sector,
+            industry: industry ?? self.industry,
+            marketCap: marketCap ?? self.marketCap
+        )
+    }
 }
 
 // Yahoo Finance v8 chart API response
