@@ -238,68 +238,88 @@ class StockService: ObservableObject {
         }.resume()
     }
 
-    // Lazy Google Finance session with consent cookie
-    private lazy var googleSession: URLSession = {
+    // Yahoo crumb dance: quoteSummary requires a session cookie + a "crumb" token.
+    // Steps: GET fc.yahoo.com (sets cookie) → GET getcrumb → use crumb on subsequent calls.
+    private lazy var yahooSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.httpCookieStorage = HTTPCookieStorage.shared
         config.httpCookieAcceptPolicy = .always
         config.timeoutIntervalForRequest = 15
-        // Set Google consent cookie to bypass consent wall
-        if let cookie = HTTPCookie(properties: [
-            .domain: ".google.com", .path: "/", .name: "SOCS",
-            .value: "CAISHAgBEhJnd3NfMjAyNDAxMDEtMF9SQzIaAmVuIAEaBgiA_LmuBg",
-            .secure: "TRUE",
-        ]) {
-            HTTPCookieStorage.shared.setCookie(cookie)
-        }
         return URLSession(configuration: config)
     }()
+    private var yahooCrumb: String?
 
-    private func fetchMarketCap(symbol: String, exchange: String, completion: @escaping (String?) -> Void) {
-        let exchangeMap: [String: String] = [
-            "NMS": "NASDAQ", "NGM": "NASDAQ", "NCM": "NASDAQ", "NasdaqGS": "NASDAQ",
-            "NasdaqGM": "NASDAQ", "NasdaqCM": "NASDAQ",
-            "NYQ": "NYSE", "New York Stock Exchange": "NYSE", "NYSE": "NYSE",
-            "PCX": "NYSEARCA", "BTS": "NYSEARCA", "NYSEArca": "NYSEARCA",
-            "LSE": "LON", "London Stock Exchange": "LON",
-            "TYO": "TYO", "Tokyo": "TYO",
-        ]
-        let gExchange = exchangeMap[exchange] ?? "NASDAQ"
-
-        guard let encoded = symbol.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://www.google.com/finance/quote/\(encoded):\(gExchange)") else {
+    private func fetchYahooCrumb(forceRefresh: Bool = false, completion: @escaping (String?) -> Void) {
+        if !forceRefresh, let c = yahooCrumb, !c.isEmpty {
+            completion(c); return
+        }
+        guard let primeURL = URL(string: "https://fc.yahoo.com/"),
+              let crumbURL = URL(string: "https://query2.finance.yahoo.com/v1/test/getcrumb") else {
             completion(nil); return
         }
 
-        var request = URLRequest(url: url)
-        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        var primeReq = URLRequest(url: primeURL)
+        primeReq.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
 
-        googleSession.dataTask(with: request) { [weak self] data, _, _ in
-            guard let data = data, let html = String(data: data, encoding: .utf8) else {
-                completion(nil); return
-            }
-
-            guard let mcIdx = html.range(of: "Market cap") else {
-                completion(nil); return
-            }
-            let afterMC = html[mcIdx.upperBound...]
-
-            if let divStart = afterMC.range(of: "P6K39c\">"),
-               let divEnd = afterMC[divStart.upperBound...].range(of: "<") {
-                var raw = String(afterMC[divStart.upperBound..<divEnd.lowerBound])
+        yahooSession.dataTask(with: primeReq) { [weak self] _, _, _ in
+            guard let self = self else { completion(nil); return }
+            var crumbReq = URLRequest(url: crumbURL)
+            crumbReq.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+            self.yahooSession.dataTask(with: crumbReq) { data, _, _ in
+                let crumb = data
+                    .flatMap { String(data: $0, encoding: .utf8) }?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                if let spaceIdx = raw.lastIndex(of: " "), raw[spaceIdx...].count <= 5 {
-                    raw = String(raw[..<spaceIdx])
+                if let crumb = crumb, !crumb.isEmpty, !crumb.contains("<") {
+                    self.yahooCrumb = crumb
+                    completion(crumb)
+                } else {
+                    completion(nil)
                 }
-                if !raw.isEmpty && raw.count < 20 {
-                    self?.marketCapCache[symbol] = raw
-                    completion(raw)
+            }.resume()
+        }.resume()
+    }
+
+    private func fetchMarketCap(symbol: String, exchange: String, retry: Int = 1, completion: @escaping (String?) -> Void) {
+        fetchYahooCrumb { [weak self] crumb in
+            guard let self = self, let crumb = crumb,
+                  let symEncoded = symbol.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                  let crumbEncoded = crumb.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                  let url = URL(string: "https://query2.finance.yahoo.com/v10/finance/quoteSummary/\(symEncoded)?modules=price&crumb=\(crumbEncoded)") else {
+                completion(nil); return
+            }
+
+            var request = URLRequest(url: url)
+            request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+
+            self.yahooSession.dataTask(with: request) { data, _, _ in
+                guard let data = data,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let qs = json["quoteSummary"] as? [String: Any] else {
+                    completion(nil); return
+                }
+
+                // Crumb expired or invalidated — refresh once and retry.
+                if let err = qs["error"] as? [String: Any],
+                   let desc = err["description"] as? String,
+                   desc.localizedCaseInsensitiveContains("crumb"),
+                   retry > 0 {
+                    self.yahooCrumb = nil
+                    self.fetchMarketCap(symbol: symbol, exchange: exchange, retry: retry - 1, completion: completion)
                     return
                 }
-            }
-            completion(nil)
-        }.resume()
+
+                guard let result = qs["result"] as? [[String: Any]],
+                      let first = result.first,
+                      let price = first["price"] as? [String: Any],
+                      let mc = price["marketCap"] as? [String: Any],
+                      let fmt = mc["fmt"] as? String, !fmt.isEmpty else {
+                    completion(nil); return
+                }
+
+                self.marketCapCache[symbol] = fmt
+                completion(fmt)
+            }.resume()
+        }
     }
 
     // MARK: - News & Earnings
