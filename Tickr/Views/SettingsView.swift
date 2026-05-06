@@ -324,8 +324,14 @@ struct SettingsView: View {
     private var previewColor: Color {
         let isUp = stockService.primaryQuote?.isUp ?? true
         switch settings.colorMode {
-        case .colored: return isUp ? .green : .red
-        case .grey:    return .primary
+        case .colored:   return isUp ? .green : .red
+        case .grey:      return .primary
+        case .accent:    return .accentColor
+        // Sectional and bold blend multiple colors at once; the menu bar renders
+        // them faithfully — preview as a flat label color since SwiftUI Text
+        // can't easily mirror NSAttributedString here.
+        case .sectional: return .primary
+        case .bold:      return .primary
         }
     }
 

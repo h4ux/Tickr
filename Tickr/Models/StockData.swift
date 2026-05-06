@@ -115,6 +115,66 @@ struct StockQuote: Identifiable {
         return parts.joined(separator: " ")
     }
 
+    /// Roles for the per-section colored menu bar mode.
+    enum MenuBarSegmentRole {
+        case symbol
+        case price
+        case trend
+        case marketCap
+        case separator
+    }
+
+    /// Same content as `menuBarText`, but split into typed segments so the
+    /// menu bar renderer can apply per-section colors / styles.
+    func menuBarSegments(format: TickerDisplayFormat, trend: TickerTrendStyle, showMarketCap: Bool = false) -> [(text: String, role: MenuBarSegmentRole)] {
+        var out: [(String, MenuBarSegmentRole)] = []
+        let sep: (String, MenuBarSegmentRole) = (" ", .separator)
+
+        switch format {
+        case .priceOnly:
+            break
+        case .tickerAndPrice, .tickerPriceAndChange:
+            out.append((symbol, .symbol))
+            out.append(sep)
+        case .companyAndPrice, .companyPriceAndChange:
+            out.append((shortCompanyName, .symbol))
+            out.append(sep)
+        }
+
+        out.append((formattedPrice, .price))
+
+        let showTrend: Bool
+        switch format {
+        case .tickerPriceAndChange, .companyPriceAndChange: showTrend = true
+        default: showTrend = false
+        }
+
+        if showTrend {
+            switch trend {
+            case .none:
+                break
+            case .arrow:
+                out.append(sep)
+                out.append((isUp ? "▲" : "▼", .trend))
+            case .arrowWithPercent:
+                out.append(sep)
+                let arrow = isUp ? "▲" : "▼"
+                out.append(("\(arrow) \(String(format: "%.2f%%", abs(changePercent)))", .trend))
+            case .percentOnly:
+                out.append(sep)
+                let sign = isUp ? "+" : "-"
+                out.append(("\(sign)\(String(format: "%.2f%%", abs(changePercent)))", .trend))
+            }
+        }
+
+        if showMarketCap, let mc = self.marketCap, !mc.isEmpty {
+            out.append(sep)
+            out.append((mc, .marketCap))
+        }
+
+        return out
+    }
+
     /// Return a copy with the given enrichment fields replaced.
     func with(sector: String?? = nil, industry: String?? = nil, marketCap: String?? = nil) -> StockQuote {
         StockQuote(

@@ -40,11 +40,17 @@ enum TickerTrendStyle: Int, CaseIterable {
 enum TickerColorMode: Int, CaseIterable {
     case colored = 0
     case grey = 1
+    case sectional = 2
+    case accent = 3
+    case bold = 4
 
     var label: String {
         switch self {
-        case .colored: return "Green / Red"
-        case .grey:    return "Grey (monochrome)"
+        case .colored:   return "Green / Red"
+        case .grey:      return "Grey (monochrome)"
+        case .sectional: return "Per section"
+        case .accent:    return "Accent color"
+        case .bold:      return "Bold ticker, colored change"
         }
     }
 }

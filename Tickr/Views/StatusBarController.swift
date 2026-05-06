@@ -136,30 +136,67 @@ class StatusBarController {
     }
 
     private func buildSingleAttributedString(for quote: StockQuote?) -> NSAttributedString {
-        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
         let result = NSMutableAttributedString()
 
         if let quote = quote {
-            let text = quote.menuBarText(format: settings.displayFormat, trend: settings.trendStyle, showMarketCap: settings.showMarketCap)
-            let color: NSColor
-            switch settings.colorMode {
-            case .colored: color = quote.isUp ? .systemGreen : .systemRed
-            case .grey:    color = .labelColor
+            let segments = quote.menuBarSegments(format: settings.displayFormat, trend: settings.trendStyle, showMarketCap: settings.showMarketCap)
+            for seg in segments {
+                result.append(attributedSegment(text: seg.text, role: seg.role, isUp: quote.isUp))
             }
-            result.append(NSAttributedString(string: text, attributes: [
-                .foregroundColor: color,
-                .font: font
-            ]))
         } else {
             let symbol = currentDisplaySymbol
             if symbol.isEmpty { return result }
             let text = "\(symbol) ..."
             result.append(NSAttributedString(string: text, attributes: [
                 .foregroundColor: NSColor.secondaryLabelColor,
-                .font: font
+                .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
             ]))
         }
         return result
+    }
+
+    /// Render a single segment with the per-section attributes for the active color mode.
+    private func attributedSegment(text: String, role: StockQuote.MenuBarSegmentRole, isUp: Bool) -> NSAttributedString {
+        let upDown: NSColor = isUp ? .systemGreen : .systemRed
+        var color: NSColor = .labelColor
+        var weight: NSFont.Weight = .medium
+
+        switch settings.colorMode {
+        case .colored:
+            color = upDown
+        case .grey:
+            color = .labelColor
+        case .accent:
+            color = .controlAccentColor
+        case .sectional:
+            switch role {
+            case .symbol:    color = .labelColor
+            case .price:     color = upDown
+            case .trend:     color = upDown
+            case .marketCap: color = .secondaryLabelColor
+            case .separator: color = .labelColor
+            }
+        case .bold:
+            switch role {
+            case .symbol:
+                color = .labelColor
+                weight = .bold
+            case .price:
+                color = .labelColor
+            case .trend:
+                color = upDown
+                weight = .semibold
+            case .marketCap:
+                color = .secondaryLabelColor
+            case .separator:
+                color = .labelColor
+            }
+        }
+
+        return NSAttributedString(string: text, attributes: [
+            .foregroundColor: color,
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: weight)
+        ])
     }
 
     // MARK: - Width & overflow marquee
@@ -288,22 +325,17 @@ class StatusBarController {
 
         let symbols = settings.rotatingSymbols
         for (i, symbol) in symbols.enumerated() {
-            let segmentText: String
-            let color: NSColor
             if let quote = stockService.quotes.first(where: { $0.symbol == symbol }) {
-                segmentText = quote.menuBarText(format: settings.displayFormat, trend: settings.trendStyle, showMarketCap: settings.showMarketCap)
-                switch settings.colorMode {
-                case .colored: color = quote.isUp ? .systemGreen : .systemRed
-                case .grey:    color = .labelColor
+                let segs = quote.menuBarSegments(format: settings.displayFormat, trend: settings.trendStyle, showMarketCap: settings.showMarketCap)
+                for s in segs {
+                    result.append(attributedSegment(text: s.text, role: s.role, isUp: quote.isUp))
                 }
             } else {
-                segmentText = "\(symbol) ..."
-                color = sepColor
+                result.append(NSAttributedString(string: "\(symbol) ...", attributes: [
+                    .foregroundColor: sepColor,
+                    .font: font
+                ]))
             }
-            result.append(NSAttributedString(string: segmentText, attributes: [
-                .foregroundColor: color,
-                .font: font
-            ]))
             // Separator after every segment (including last, for a clean wrap-around).
             if i < symbols.count - 1 || symbols.count > 0 {
                 result.append(NSAttributedString(string: scrollSeparator, attributes: [
