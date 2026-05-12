@@ -80,6 +80,38 @@ class StatusBarController {
         DispatchQueue.main.async { [weak self] in
             self?.stockService.startFetching()
         }
+
+        // Register/unregister the clipboard-history hotkey reactively.
+        Publishers.CombineLatest3(settings.$clipboardEnabled,
+                                  settings.$clipboardShortcutEnabled,
+                                  settings.$clipboardShortcutKeyCode.combineLatest(settings.$clipboardShortcutModifiers))
+            .receive(on: RunLoop.main)
+            .sink { enabled, shortcutOn, combo in
+                if enabled && shortcutOn && combo.0 != 0 {
+                    HotKeyService.shared.register(name: "clipboard", keyCode: combo.0, modifiers: combo.1) {
+                        ClipboardHistoryWindowController.shared.toggle()
+                    }
+                } else {
+                    HotKeyService.shared.unregister(name: "clipboard")
+                }
+            }
+            .store(in: &cancellables)
+
+        // Same for the todo window hotkey.
+        Publishers.CombineLatest3(settings.$todoEnabled,
+                                  settings.$todoShortcutEnabled,
+                                  settings.$todoShortcutKeyCode.combineLatest(settings.$todoShortcutModifiers))
+            .receive(on: RunLoop.main)
+            .sink { enabled, shortcutOn, combo in
+                if enabled && shortcutOn && combo.0 != 0 {
+                    HotKeyService.shared.register(name: "todo", keyCode: combo.0, modifiers: combo.1) {
+                        TodoWindowController.shared.toggleQuickEntry()
+                    }
+                } else {
+                    HotKeyService.shared.unregister(name: "todo")
+                }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Display

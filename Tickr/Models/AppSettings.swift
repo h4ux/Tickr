@@ -199,6 +199,22 @@ class AppSettings: ObservableObject {
     private static let notificationsEnabledKey = "notificationsEnabled"
     private static let notifyOnPriceChangeKey = "notifyOnPriceChange"
     private static let priceChangeThresholdKey = "priceChangePercentThreshold"
+    private static let clipboardEnabledKey = "clipboardEnabled"
+    private static let clipboardHistoryLimitKey = "clipboardHistoryLimit"
+    private static let clipboardSyncEnabledKey = "clipboardSyncEnabled"
+    private static let clipboardSyncKeyKey = "clipboardSyncKey"
+    private static let clipboardShortcutEnabledKey = "clipboardShortcutEnabled"
+    private static let clipboardWindowWidthKey = "clipboardWindowWidth"
+    private static let clipboardWindowHeightKey = "clipboardWindowHeight"
+    private static let clipboardShortcutKeyCodeKey = "clipboardShortcutKeyCode"
+    private static let clipboardShortcutModifiersKey = "clipboardShortcutModifiers"
+    private static let todoEnabledKey = "todoEnabled"
+    private static let todoShortcutEnabledKey = "todoShortcutEnabled"
+    private static let todoShortcutKeyCodeKey = "todoShortcutKeyCode"
+    private static let todoShortcutModifiersKey = "todoShortcutModifiers"
+    private static let todoWindowWidthKey = "todoWindowWidth"
+    private static let todoWindowHeightKey = "todoWindowHeight"
+    private static let todoSyncEnabledKey = "todoSyncEnabled"
     private static let showMarketCapKey = "showMarketCap"
     private static let menuBarMaxWidthKey = "menuBarMaxWidth"
 
@@ -307,6 +323,74 @@ class AppSettings: ObservableObject {
         didSet {
             UserDefaults.standard.set(priceChangePercentThreshold, forKey: Self.priceChangeThresholdKey)
         }
+    }
+
+    // MARK: Bonus features — clipboard
+
+    @Published var clipboardEnabled: Bool {
+        didSet { UserDefaults.standard.set(clipboardEnabled, forKey: Self.clipboardEnabledKey) }
+    }
+
+    @Published var clipboardHistoryLimit: Int {
+        didSet { UserDefaults.standard.set(clipboardHistoryLimit, forKey: Self.clipboardHistoryLimitKey) }
+    }
+
+    @Published var clipboardShortcutEnabled: Bool {
+        didSet { UserDefaults.standard.set(clipboardShortcutEnabled, forKey: Self.clipboardShortcutEnabledKey) }
+    }
+
+    @Published var clipboardSyncEnabled: Bool {
+        didSet { UserDefaults.standard.set(clipboardSyncEnabled, forKey: Self.clipboardSyncEnabledKey) }
+    }
+
+    @Published var clipboardSyncKey: String {
+        didSet { UserDefaults.standard.set(clipboardSyncKey, forKey: Self.clipboardSyncKeyKey) }
+    }
+
+    @Published var clipboardWindowWidth: Int {
+        didSet { UserDefaults.standard.set(clipboardWindowWidth, forKey: Self.clipboardWindowWidthKey) }
+    }
+
+    @Published var clipboardWindowHeight: Int {
+        didSet { UserDefaults.standard.set(clipboardWindowHeight, forKey: Self.clipboardWindowHeightKey) }
+    }
+
+    @Published var clipboardShortcutKeyCode: UInt32 {
+        didSet { UserDefaults.standard.set(Int(clipboardShortcutKeyCode), forKey: Self.clipboardShortcutKeyCodeKey) }
+    }
+
+    @Published var clipboardShortcutModifiers: UInt32 {
+        didSet { UserDefaults.standard.set(Int(clipboardShortcutModifiers), forKey: Self.clipboardShortcutModifiersKey) }
+    }
+
+    // MARK: Bonus features — todo
+
+    @Published var todoEnabled: Bool {
+        didSet { UserDefaults.standard.set(todoEnabled, forKey: Self.todoEnabledKey) }
+    }
+
+    @Published var todoShortcutEnabled: Bool {
+        didSet { UserDefaults.standard.set(todoShortcutEnabled, forKey: Self.todoShortcutEnabledKey) }
+    }
+
+    @Published var todoShortcutKeyCode: UInt32 {
+        didSet { UserDefaults.standard.set(Int(todoShortcutKeyCode), forKey: Self.todoShortcutKeyCodeKey) }
+    }
+
+    @Published var todoShortcutModifiers: UInt32 {
+        didSet { UserDefaults.standard.set(Int(todoShortcutModifiers), forKey: Self.todoShortcutModifiersKey) }
+    }
+
+    @Published var todoWindowWidth: Int {
+        didSet { UserDefaults.standard.set(todoWindowWidth, forKey: Self.todoWindowWidthKey) }
+    }
+
+    @Published var todoWindowHeight: Int {
+        didSet { UserDefaults.standard.set(todoWindowHeight, forKey: Self.todoWindowHeightKey) }
+    }
+
+    @Published var todoSyncEnabled: Bool {
+        didSet { UserDefaults.standard.set(todoSyncEnabled, forKey: Self.todoSyncEnabledKey) }
     }
 
     @Published var showMarketCap: Bool {
@@ -446,6 +530,40 @@ class AppSettings: ObservableObject {
         }
         let storedThreshold = UserDefaults.standard.double(forKey: Self.priceChangeThresholdKey)
         self.priceChangePercentThreshold = storedThreshold > 0 ? storedThreshold : 5.0
+        self.clipboardEnabled = UserDefaults.standard.bool(forKey: Self.clipboardEnabledKey)
+        let storedLimit = UserDefaults.standard.integer(forKey: Self.clipboardHistoryLimitKey)
+        self.clipboardHistoryLimit = storedLimit > 0 ? storedLimit : 30
+        if UserDefaults.standard.object(forKey: Self.clipboardShortcutEnabledKey) == nil {
+            self.clipboardShortcutEnabled = true
+        } else {
+            self.clipboardShortcutEnabled = UserDefaults.standard.bool(forKey: Self.clipboardShortcutEnabledKey)
+        }
+        self.clipboardSyncEnabled = UserDefaults.standard.bool(forKey: Self.clipboardSyncEnabledKey)
+        self.clipboardSyncKey = UserDefaults.standard.string(forKey: Self.clipboardSyncKeyKey) ?? ""
+        let storedW = UserDefaults.standard.integer(forKey: Self.clipboardWindowWidthKey)
+        self.clipboardWindowWidth = storedW > 0 ? storedW : 780
+        let storedH = UserDefaults.standard.integer(forKey: Self.clipboardWindowHeightKey)
+        self.clipboardWindowHeight = storedH > 0 ? storedH : 480
+        let storedCB = UserDefaults.standard.integer(forKey: Self.clipboardShortcutKeyCodeKey)
+        self.clipboardShortcutKeyCode = storedCB > 0 ? UInt32(storedCB) : 9  // V
+        let storedCBM = UserDefaults.standard.integer(forKey: Self.clipboardShortcutModifiersKey)
+        self.clipboardShortcutModifiers = storedCBM > 0 ? UInt32(storedCBM) : (256 | 512)  // ⌘⇧
+
+        self.todoEnabled = UserDefaults.standard.bool(forKey: Self.todoEnabledKey)
+        if UserDefaults.standard.object(forKey: Self.todoShortcutEnabledKey) == nil {
+            self.todoShortcutEnabled = true
+        } else {
+            self.todoShortcutEnabled = UserDefaults.standard.bool(forKey: Self.todoShortcutEnabledKey)
+        }
+        let storedTK = UserDefaults.standard.integer(forKey: Self.todoShortcutKeyCodeKey)
+        self.todoShortcutKeyCode = storedTK > 0 ? UInt32(storedTK) : 17  // T
+        let storedTKM = UserDefaults.standard.integer(forKey: Self.todoShortcutModifiersKey)
+        self.todoShortcutModifiers = storedTKM > 0 ? UInt32(storedTKM) : (256 | 512)  // ⌘⇧
+        let storedTW = UserDefaults.standard.integer(forKey: Self.todoWindowWidthKey)
+        self.todoWindowWidth = storedTW > 0 ? storedTW : 520
+        let storedTH = UserDefaults.standard.integer(forKey: Self.todoWindowHeightKey)
+        self.todoWindowHeight = storedTH > 0 ? storedTH : 560
+        self.todoSyncEnabled = UserDefaults.standard.bool(forKey: Self.todoSyncEnabledKey)
         self.showMarketCap = UserDefaults.standard.bool(forKey: Self.showMarketCapKey)
         self.menuBarMaxWidth = UserDefaults.standard.double(forKey: Self.menuBarMaxWidthKey)
         self.showAdsWhenLicensed = UserDefaults.standard.bool(forKey: Self.showAdsKey)

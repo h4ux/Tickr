@@ -127,6 +127,28 @@ struct TickerDropdownView: View {
                         .foregroundColor(.secondary)
                 }
                 Spacer()
+                if settings.clipboardEnabled {
+                    Button(action: { ClipboardHistoryWindowController.shared.show() }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "doc.on.clipboard")
+                            Text("Clipboard")
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("Open clipboard history")
+                }
+                if settings.todoEnabled {
+                    Button(action: { TodoWindowController.shared.show() }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checklist")
+                            Text("Todos")
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("Open todos")
+                }
                 Button("Settings…") { onSettings() }
                     .buttonStyle(.borderless)
                     .font(.caption)

@@ -88,6 +88,8 @@ jobs:
             Tickr/TickrApp.swift \
             Tickr/Models/StockData.swift \
             Tickr/Models/AppSettings.swift \
+            Tickr/Models/ClipboardItem.swift \
+            Tickr/Models/TodoItem.swift \
             Tickr/Services/StockService.swift \
             Tickr/Services/AnalyticsService.swift \
             Tickr/Services/SuggestionsService.swift \
@@ -96,10 +98,18 @@ jobs:
             Tickr/Services/AdService.swift \
             Tickr/Services/LaunchAtLoginService.swift \
             Tickr/Services/NotificationService.swift \
+            Tickr/Services/ClipboardService.swift \
+            Tickr/Services/ClipboardSyncService.swift \
+            Tickr/Services/TodoService.swift \
+            Tickr/Services/TodoSyncService.swift \
+            Tickr/Services/HotKeyService.swift \
             Tickr/Services/Secrets.swift \
             Tickr/Views/StatusBarController.swift \
             Tickr/Views/TickerDropdownView.swift \
-            Tickr/Views/SettingsView.swift
+            Tickr/Views/SettingsView.swift \
+            Tickr/Views/ClipboardHistoryWindow.swift \
+            Tickr/Views/TodoWindow.swift \
+            Tickr/Views/ShortcutRecorder.swift
 
           cp Tickr/Info.plist "$APP_DIR/Info.plist"
           echo -n "APPL????" > "$APP_DIR/PkgInfo"

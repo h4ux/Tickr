@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var showAddCategory = false
     @State private var newCategoryName = ""
     @State private var newCategoryIcon = "folder"
+    @State private var selectedTab: String = "appearance"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,21 +19,30 @@ struct SettingsView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 8)
 
-            TabView {
+            TabView(selection: $selectedTab) {
                 appearanceTab
                     .tabItem { Label("Appearance", systemImage: "paintpalette") }
+                    .tag("appearance")
 
                 generalTab
                     .tabItem { Label("General", systemImage: "gearshape") }
+                    .tag("general")
 
                 notificationsTab
                     .tabItem { Label("Notifications", systemImage: "bell.badge") }
+                    .tag("notifications")
 
                 licenseTab
                     .tabItem { Label("License", systemImage: "key.fill") }
+                    .tag("license")
 
                 aboutTab
                     .tabItem { Label("About", systemImage: "info.circle") }
+                    .tag("about")
+
+                bonusTab
+                    .tabItem { Label("Bonus", systemImage: "sparkles") }
+                    .tag("bonus")
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
@@ -126,12 +136,17 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var aboutTab: some View {
-        AboutTab()
+        AboutTab(onOpenBonus: { selectedTab = "bonus" })
     }
 
     @ViewBuilder
     private var notificationsTab: some View {
         NotificationsTab()
+    }
+
+    @ViewBuilder
+    private var bonusTab: some View {
+        BonusFeaturesTab()
     }
 
     // MARK: - Sections
@@ -1405,6 +1420,8 @@ struct AnalyticsSection: View {
 // MARK: - About Tab
 
 struct AboutTab: View {
+    var onOpenBonus: () -> Void = {}
+
     var body: some View {
         VStack(spacing: 14) {
             Spacer().frame(height: 8)
@@ -1436,6 +1453,18 @@ struct AboutTab: View {
             Divider().padding(.horizontal, 60)
 
             VStack(spacing: 6) {
+                Button(action: onOpenBonus) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .frame(width: 16)
+                        Text("Bonus Features")
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(.borderless)
+
                 aboutLink(title: "View on GitHub",  systemImage: "chevron.left.forwardslash.chevron.right", url: "https://github.com/h4ux/Tickr")
                 aboutLink(title: "Report an Issue", systemImage: "exclamationmark.bubble",                  url: "https://github.com/h4ux/Tickr/issues")
                 aboutLink(title: "Visit Website",   systemImage: "globe",                                   url: "https://h4ux.com")
@@ -1591,5 +1620,330 @@ struct NotificationsTab: View {
         }
         .formStyle(.grouped)
         .onAppear { notif.refreshStatus() }
+    }
+}
+
+// MARK: - Bonus Features Tab
+
+struct BonusFeaturesTab: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var clipboard = ClipboardService.shared
+    @ObservedObject private var sync = ClipboardSyncService.shared
+    @ObservedObject private var license = LicenseService.shared
+    @State private var showSyncHelp = false
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Multi-Clipboard")
+                        .font(.headline)
+                    Text("Captures everything you copy (text & images) and keeps a searchable history. Open the window with ⌘⇧V.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 2)
+
+                Toggle("Enable multi-clipboard", isOn: $settings.clipboardEnabled)
+
+                if settings.clipboardEnabled {
+                    HStack {
+                        Text("History size:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(settings.clipboardHistoryLimit) items")
+                            .font(.system(.body, design: .monospaced))
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(settings.clipboardHistoryLimit) },
+                            set: { settings.clipboardHistoryLimit = Int($0) }
+                        ),
+                        in: 5...200, step: 5
+                    )
+
+                    Toggle("Enable global shortcut to open clipboard history", isOn: $settings.clipboardShortcutEnabled)
+
+                    if settings.clipboardShortcutEnabled {
+                        HStack {
+                            Text("Shortcut:")
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            ShortcutRecorder(
+                                keyCode: $settings.clipboardShortcutKeyCode,
+                                modifiers: $settings.clipboardShortcutModifiers
+                            )
+                        }
+                    }
+
+                    HStack {
+                        Text("Default window width:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(settings.clipboardWindowWidth) px")
+                            .font(.system(.body, design: .monospaced))
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(settings.clipboardWindowWidth) },
+                            set: { settings.clipboardWindowWidth = Int($0) }
+                        ),
+                        in: 560...1400, step: 20
+                    )
+
+                    HStack {
+                        Text("Default window height:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(settings.clipboardWindowHeight) px")
+                            .font(.system(.body, design: .monospaced))
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(settings.clipboardWindowHeight) },
+                            set: { settings.clipboardWindowHeight = Int($0) }
+                        ),
+                        in: 320...1000, step: 20
+                    )
+
+                    HStack {
+                        Button(action: { ClipboardHistoryWindowController.shared.show() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "doc.on.clipboard")
+                                Text("Open Clipboard History")
+                            }
+                        }
+                        Spacer()
+                        Text("\(clipboard.items.count) items stored")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            } header: {
+                Text("Clipboard")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Quick Todos")
+                        .font(.headline)
+                    Text("Capture todos in a hurry — global shortcut opens an entry box. Mark done, archive, edit, and export.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 2)
+
+                Toggle("Enable quick todos", isOn: $settings.todoEnabled)
+
+                if settings.todoEnabled {
+                    Toggle("Enable global shortcut to open todos", isOn: $settings.todoShortcutEnabled)
+
+                    if settings.todoShortcutEnabled {
+                        HStack {
+                            Text("Shortcut:")
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            ShortcutRecorder(
+                                keyCode: $settings.todoShortcutKeyCode,
+                                modifiers: $settings.todoShortcutModifiers
+                            )
+                        }
+                    }
+
+                    HStack {
+                        Text("Default window width:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(settings.todoWindowWidth) px")
+                            .font(.system(.body, design: .monospaced))
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(settings.todoWindowWidth) },
+                            set: { settings.todoWindowWidth = Int($0) }
+                        ),
+                        in: 440...1200, step: 20
+                    )
+
+                    HStack {
+                        Text("Default window height:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(settings.todoWindowHeight) px")
+                            .font(.system(.body, design: .monospaced))
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(settings.todoWindowHeight) },
+                            set: { settings.todoWindowHeight = Int($0) }
+                        ),
+                        in: 360...1000, step: 20
+                    )
+
+                    HStack {
+                        Button(action: { TodoWindowController.shared.show() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checklist")
+                                Text("Open Todos")
+                            }
+                        }
+                        Spacer()
+                        Text("\(TodoService.shared.items.count) total")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if license.isLicensed {
+                        Toggle("Sync todos across my Macs (uses your clipboard sync key)", isOn: $settings.todoSyncEnabled)
+                    }
+                }
+            } header: {
+                Text("Todos")
+            }
+
+            if settings.clipboardEnabled {
+                Section {
+                    if !license.isLicensed {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "lock.fill")
+                                    .foregroundColor(.secondary)
+                                Text("Sync is a Pro feature")
+                                    .font(.system(.body, weight: .medium))
+                            }
+                            Text("Activate Tickr Pro to encrypt and sync your clipboard history across your Macs.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    } else {
+                        Toggle("Sync clipboard to my other Macs (end-to-end encrypted)", isOn: $settings.clipboardSyncEnabled)
+
+                        if settings.clipboardSyncEnabled {
+                            HStack(alignment: .top) {
+                                Text("Sync key:")
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                if settings.clipboardSyncKey.isEmpty {
+                                    Button("Generate") {
+                                        settings.clipboardSyncKey = ClipboardSyncService.generateSyncKey()
+                                    }
+                                } else {
+                                    Text(settings.clipboardSyncKey)
+                                        .font(.system(.caption, design: .monospaced))
+                                        .textSelection(.enabled)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .frame(maxWidth: 220, alignment: .trailing)
+                                    Button(action: {
+                                        let pb = NSPasteboard.general
+                                        pb.clearContents()
+                                        pb.setString(settings.clipboardSyncKey, forType: .string)
+                                    }) {
+                                        Image(systemName: "doc.on.doc")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Copy sync key")
+                                    Button(action: {
+                                        settings.clipboardSyncKey = ClipboardSyncService.generateSyncKey()
+                                    }) {
+                                        Image(systemName: "arrow.triangle.2.circlepath")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Regenerate (will disconnect other devices)")
+                                }
+                            }
+
+                            if !settings.clipboardSyncKey.isEmpty {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Sync ID:")
+                                        .foregroundColor(.secondary)
+                                        .font(.caption)
+                                    Text(ClipboardSyncService.syncID(
+                                        email: license.licensedEmail,
+                                        key: settings.clipboardSyncKey))
+                                        .font(.system(.caption2, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                        .textSelection(.enabled)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+
+                                Text("⚠️ Save this key. Anyone with it can decrypt your clipboard. Tickr stores it locally only — there's no recovery if lost.")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+
+                                HStack {
+                                    Button(action: { sync.fetch() }) {
+                                        HStack(spacing: 4) {
+                                            if sync.isFetching {
+                                                ProgressView().scaleEffect(0.5)
+                                            }
+                                            Text(sync.isFetching ? "Fetching…" : "Pull Now")
+                                        }
+                                    }
+                                    .disabled(sync.isFetching)
+                                    Spacer()
+                                    if let last = sync.lastUploadedAt {
+                                        Text("Last pushed: \(last, formatter: updateTimeFormatter)")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+
+                                if let err = sync.lastError {
+                                    Text(err)
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                            }
+
+                            Button(action: { showSyncHelp.toggle() }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "info.circle")
+                                    Text(showSyncHelp ? "Hide setup instructions" : "How sync works / setup steps")
+                                }
+                                .font(.caption)
+                            }
+                            .buttonStyle(.borderless)
+
+                            if showSyncHelp {
+                                clipboardSyncHelp
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Sync (Pro)")
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var clipboardSyncHelp: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("How it works")
+                .font(.system(.caption, weight: .semibold))
+            Group {
+                Label("Each clipboard entry is encrypted on this Mac with AES-256-GCM using your sync key.", systemImage: "lock.shield")
+                Label("Tickr uploads the ciphertext to Cloudflare KV (keyed by SHA-256 of email + sync key).", systemImage: "cloud")
+                Label("Other Macs running Tickr Pro with the same sync key decrypt and merge into history.", systemImage: "arrow.left.arrow.right")
+                Label("The server only ever sees opaque encrypted blobs — never your text, images, or email.", systemImage: "eye.slash")
+            }
+            .font(.caption2)
+            .foregroundColor(.secondary)
+
+            Text("Use the same key on another Mac")
+                .font(.system(.caption, weight: .semibold))
+                .padding(.top, 4)
+            Group {
+                Label("Install Tickr Pro and activate with the same license email.", systemImage: "1.circle")
+                Label("Open Bonus → Clipboard, enable Multi-clipboard, then enable Sync.", systemImage: "2.circle")
+                Label("Paste the sync key (instead of generating a new one) and press Pull Now.", systemImage: "3.circle")
+            }
+            .font(.caption2)
+            .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 }
