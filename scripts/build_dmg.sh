@@ -60,7 +60,8 @@ swiftc \
     Tickr/Views/SettingsView.swift \
     Tickr/Views/ClipboardHistoryWindow.swift \
     Tickr/Views/TodoWindow.swift \
-    Tickr/Views/ShortcutRecorder.swift
+    Tickr/Views/ShortcutRecorder.swift \
+    Tickr/Views/UpdateBanner.swift
 
 # Assemble app bundle
 cp Tickr/Info.plist "$APP_DIR/Info.plist"

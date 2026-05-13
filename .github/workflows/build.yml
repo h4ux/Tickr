@@ -109,7 +109,8 @@ jobs:
             Tickr/Views/SettingsView.swift \
             Tickr/Views/ClipboardHistoryWindow.swift \
             Tickr/Views/TodoWindow.swift \
-            Tickr/Views/ShortcutRecorder.swift
+            Tickr/Views/ShortcutRecorder.swift \
+            Tickr/Views/UpdateBanner.swift
 
           cp Tickr/Info.plist "$APP_DIR/Info.plist"
           echo -n "APPL????" > "$APP_DIR/PkgInfo"

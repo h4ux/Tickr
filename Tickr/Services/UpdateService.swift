@@ -27,6 +27,7 @@ class UpdateService: ObservableObject {
 
     private static let autoCheckKey = "autoCheckForUpdates"
     private static let lastCheckKey = "lastUpdateCheck"
+    private static let lastNotifiedVersionKey = "lastNotifiedUpdateVersion"
     private static let checkInterval: TimeInterval = 86400 // 24 hours
 
     @Published var latestVersion: String?
@@ -107,8 +108,24 @@ class UpdateService: ObservableObject {
                     self?.downloadSize = Self.formatBytes(dmgAsset.size)
                 }
 
-                self?.updateAvailable = Self.isNewerVersion(remoteVersion, than: Self.currentVersion)
+                let isNewer = Self.isNewerVersion(remoteVersion, than: Self.currentVersion)
+                self?.updateAvailable = isNewer
                 self?.errorMessage = nil
+
+                // First time we see this version → ping the user once (system
+                // notification + dismissable in-app banner). Subsequent checks
+                // for the same version stay quiet.
+                if isNewer {
+                    let lastNotified = UserDefaults.standard.string(forKey: Self.lastNotifiedVersionKey) ?? ""
+                    if remoteVersion != lastNotified {
+                        UserDefaults.standard.set(remoteVersion, forKey: Self.lastNotifiedVersionKey)
+                        NotificationService.shared.sendUpdateAvailable(version: remoteVersion)
+                        UpdateBannerController.shared.show(
+                            version: remoteVersion,
+                            downloadSize: self?.downloadSize
+                        )
+                    }
+                }
             }
         }.resume()
     }

@@ -124,6 +124,18 @@ class NotificationService: NSObject, ObservableObject {
         send(title: "Tickr", body: "Notifications are working ✓", identifier: "tickr-test-\(UUID().uuidString)")
     }
 
+    /// Stable identifier per version so the OS de-dupes repeated checks.
+    /// Honors the user's notifications-enabled toggle; if it's off, the
+    /// in-app banner is still shown by `UpdateService`.
+    func sendUpdateAvailable(version: String) {
+        guard settings.notificationsEnabled, isAuthorized else { return }
+        send(
+            title: "Tickr update available",
+            body: "Version \(version) is ready to install. Click Tickr in the menu bar to update.",
+            identifier: "tickr-update-\(version)"
+        )
+    }
+
     // MARK: - Criteria evaluation
 
     func evaluate(quotes: [StockQuote]) {
