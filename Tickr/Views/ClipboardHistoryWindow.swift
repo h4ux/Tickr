@@ -52,6 +52,8 @@ struct ClipboardHistoryView: View {
     @State private var search = ""
     @State private var selectedID: UUID?
     @State private var keyMonitor: Any?
+    @State private var editingItem: ClipboardItem?
+    @State private var editingText = ""
     let onPaste: () -> Void
 
     private var filtered: [ClipboardItem] {
@@ -125,6 +127,25 @@ struct ClipboardHistoryView: View {
         .onDisappear {
             removeKeyMonitor()
         }
+        .sheet(item: $editingItem) { _ in
+            ClipboardEditSheet(
+                text: $editingText,
+                onSave: {
+                    if let new = clipboard.addEditedText(editingText) {
+                        selectedID = new.id
+                    }
+                    editingItem = nil
+                },
+                onCancel: { editingItem = nil }
+            )
+        }
+    }
+
+    /// Open the edit sheet pre-populated with the current item's text.
+    private func beginEdit(_ item: ClipboardItem) {
+        guard item.type == .text else { return }
+        editingText = item.text
+        editingItem = item
     }
 
     // MARK: - Panes
@@ -149,9 +170,21 @@ struct ClipboardHistoryView: View {
                     ClipboardRow(item: item)
                         .tag(item.id)
                         .contentShape(Rectangle())
-                        .onTapGesture(count: 2) { paste(item) }
+                        // Single click pastes — selection is what keyboard arrows do.
+                        // `.simultaneousGesture` plays nice with List's tap-to-select
+                        // handler that otherwise eats `onTapGesture` on macOS.
+                        .simultaneousGesture(
+                            TapGesture(count: 1).onEnded {
+                                selectedID = item.id
+                                paste(item)
+                            }
+                        )
                         .contextMenu {
                             Button("Copy") { clipboard.paste(item) }
+                            if item.type == .text {
+                                Button("Edit as new…") { beginEdit(item) }
+                            }
+                            Divider()
                             Button("Delete", role: .destructive) { clipboard.remove(item) }
                         }
                 }
@@ -170,7 +203,12 @@ struct ClipboardHistoryView: View {
     @ViewBuilder
     private var previewPane: some View {
         if let item = selectedItem {
-            ClipboardPreview(item: item, onCopy: { paste(item) }, onDelete: { clipboard.remove(item) })
+            ClipboardPreview(
+                item: item,
+                onCopy:   { paste(item) },
+                onDelete: { clipboard.remove(item) },
+                onEdit:   item.type == .text ? { beginEdit(item) } : nil
+            )
         } else {
             VStack(spacing: 6) {
                 Spacer()
@@ -309,6 +347,7 @@ struct ClipboardPreview: View {
     let item: ClipboardItem
     let onCopy: () -> Void
     let onDelete: () -> Void
+    var onEdit: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -360,6 +399,13 @@ struct ClipboardPreview: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Reveal in Finder")
+            }
+            if let onEdit = onEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(.borderless)
+                .help("Edit (saves as a new clipboard item)")
             }
             Button(action: onCopy) {
                 Image(systemName: "doc.on.doc")
@@ -486,4 +532,42 @@ private func formatPreviewBytes(_ bytes: Int) -> String {
     let mb = Double(bytes) / (1024 * 1024)
     if mb >= 1 { return String(format: "%.2f MB", mb) }
     return String(format: "%.0f KB", Double(bytes) / 1024)
+}
+
+// MARK: - Edit sheet
+
+/// Multi-line editor for a text clipboard item. Saving prepends a new entry —
+/// the original item is untouched.
+private struct ClipboardEditSheet: View {
+    @Binding var text: String
+    let onSave: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Edit clipboard item")
+                    .font(.headline)
+                Spacer()
+                Text("Saves as a new entry")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Save", action: onSave)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(12)
+
+            Divider()
+
+            TextEditor(text: $text)
+                .font(.system(.body))
+                .scrollContentBackground(.hidden)
+                .padding(8)
+                .background(Color(nsColor: .textBackgroundColor))
+        }
+        .frame(minWidth: 560, minHeight: 380, idealHeight: 460)
+    }
 }

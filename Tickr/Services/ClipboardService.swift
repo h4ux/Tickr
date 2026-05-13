@@ -148,6 +148,17 @@ class ClipboardService: ObservableObject {
         lastChangeCount = NSPasteboard.general.changeCount
     }
 
+    /// Create a new text entry from edited content. The original item is left
+    /// alone — the edited version becomes the most-recent item.
+    @discardableResult
+    func addEditedText(_ text: String) -> ClipboardItem? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let item = ClipboardItem(type: .text, text: trimmed)
+        prepend(item)
+        return item
+    }
+
     func remove(_ item: ClipboardItem) {
         items.removeAll { $0.id == item.id }
         saveToDisk()
