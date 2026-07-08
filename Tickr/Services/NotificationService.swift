@@ -124,6 +124,42 @@ class NotificationService: NSObject, ObservableObject {
         send(title: "Tickr", body: "Notifications are working ✓", identifier: "tickr-test-\(UUID().uuidString)")
     }
 
+    /// Fired by SECService when one or more new filings show up for a ticker.
+    /// For insider filings we may still be enriching (fetching XML) at the
+    /// time this fires — the notification body degrades gracefully to just
+    /// the form + date when insider info hasn't landed yet.
+    func sendSECFilings(symbol: String, newFilings: [FilingItem]) {
+        guard settings.notificationsEnabled, isAuthorized else { return }
+        guard !newFilings.isEmpty else { return }
+        let title = "\(symbol) filed \(newFilings.count == 1 ? "a new filing" : "\(newFilings.count) new filings")"
+        let body: String
+        if newFilings.count == 1, let first = newFilings.first {
+            body = describe(first, forNotification: true)
+        } else {
+            let head = newFilings.prefix(2).map { describe($0, forNotification: false) }
+            let remaining = newFilings.count - 2
+            body = head.joined(separator: "\n") + (remaining > 0 ? "\n+\(remaining) more" : "")
+        }
+        send(title: title, body: body, identifier: "tickr-sec-\(symbol)-\(newFilings.map(\.accessionNumber).joined(separator: "-"))")
+    }
+
+    /// Build one line of notification body text for a single filing.
+    private func describe(_ f: FilingItem, forNotification single: Bool) -> String {
+        let titleSuffix = f.displayTitle == f.form ? "" : " — \(f.displayTitle)"
+        let head = "\(f.form)\(titleSuffix)\(single ? " · \(f.filingDate)" : "")"
+        guard f.isInsiderForm, let insider = f.insider else { return head }
+
+        // Insider: "4 — Insider Trading Statement · Jane Doe (Director) — Sold 10,000 sh @ $185.00"
+        var extra = insider.ownerName
+        if !insider.relationships.isEmpty {
+            extra += " (\(insider.relationships.joined(separator: ", ")))"
+        }
+        if !insider.transactions.isEmpty {
+            extra += " — \(insider.summaryLine)"
+        }
+        return "\(head)\n\(extra)"
+    }
+
     /// Stable identifier per version so the OS de-dupes repeated checks.
     /// Honors the user's notifications-enabled toggle; if it's off, the
     /// in-app banner is still shown by `UpdateService`.

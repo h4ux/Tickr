@@ -120,6 +120,7 @@ struct SettingsView: View {
                 }
             }
             LaunchAtLoginSection()
+            SECSection()
             UpdateSection()
             AnalyticsSection()
         }
@@ -390,6 +391,8 @@ struct SingleTickerRow: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var stockService = StockService.shared
     @State private var sharesText: String = ""
+    @State private var editingCIK = false
+    @State private var cikDraft: String = ""
 
     var body: some View {
         VStack(spacing: 4) {
@@ -423,6 +426,24 @@ struct SingleTickerRow: View {
                         .cornerRadius(4)
                 }
 
+                // CIK indicator + edit button
+                Button(action: {
+                    cikDraft = settings.cik(for: symbol) ?? ""
+                    editingCIK = true
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.caption)
+                        if let cik = settings.cik(for: symbol) {
+                            Text(cik)
+                                .font(.system(.caption2, design: .monospaced))
+                        }
+                    }
+                    .foregroundColor(settings.cik(for: symbol) != nil ? .accentColor : .secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(settings.cik(for: symbol) != nil ? "Edit SEC CIK (\(settings.cik(for: symbol) ?? ""))" : "Set SEC CIK for filings")
+
                 if !settings.categories.isEmpty {
                     Menu {
                         ForEach(settings.categories, id: \.id) { cat in
@@ -447,6 +468,20 @@ struct SingleTickerRow: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Remove \(symbol)")
+            }
+            .sheet(isPresented: $editingCIK) {
+                CIKEditSheet(
+                    symbol: symbol,
+                    cik: $cikDraft,
+                    onSave: {
+                        settings.setCIK(cikDraft, for: symbol)
+                        editingCIK = false
+                        if settings.cik(for: symbol) != nil {
+                            SECService.shared.pollOne(symbol: symbol)
+                        }
+                    },
+                    onCancel: { editingCIK = false }
+                )
             }
 
             // Holdings input
@@ -1176,6 +1211,116 @@ private let updateTimeFormatter: DateFormatter = {
     f.timeStyle = .short
     return f
 }()
+
+// MARK: - SEC EDGAR Section
+
+struct SECSection: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var sec = SECService.shared
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("SEC EDGAR filings")
+                    .font(.headline)
+                Text("Poll data.sec.gov for filings on tickers you assign a CIK to. Optionally get notified when new filings appear.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 2)
+
+            // SEC requires a real name + email in User-Agent on every request.
+            VStack(alignment: .leading, spacing: 6) {
+                Text("SEC User-Agent (required by SEC on every request)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("Full name", text: $settings.secUserAgentName)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Email address", text: $settings.secUserAgentEmail)
+                    .textFieldStyle(.roundedBorder)
+                if !settings.secUserAgentConfigured {
+                    Text("Set both fields — SEC will 403 requests without them.")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                }
+            }
+
+            Toggle("Poll for filings automatically", isOn: $settings.secPollingEnabled)
+
+            if settings.secPollingEnabled {
+                HStack {
+                    Text("Poll every:")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(settings.secPollingIntervalMinutes) min")
+                        .font(.system(.body, design: .monospaced))
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(settings.secPollingIntervalMinutes) },
+                        set: { settings.secPollingIntervalMinutes = Int($0) }
+                    ),
+                    in: 5...240, step: 5
+                )
+
+                HStack {
+                    Text("Show filings from last:")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(settings.secDateRangeDays) day\(settings.secDateRangeDays == 1 ? "" : "s")")
+                        .font(.system(.body, design: .monospaced))
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(settings.secDateRangeDays) },
+                        set: { settings.secDateRangeDays = Int($0) }
+                    ),
+                    in: 1...365, step: 1
+                )
+
+                Toggle("Notify on new filings", isOn: $settings.secNotifyOnNewFilings)
+            }
+
+            HStack {
+                Button(action: { sec.pollAll() }) {
+                    HStack(spacing: 4) {
+                        if sec.isPolling {
+                            ProgressView().scaleEffect(0.5)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        Text(sec.isPolling ? "Polling…" : "Poll Now")
+                    }
+                }
+                .disabled(sec.isPolling || !settings.secUserAgentConfigured)
+
+                Spacer()
+
+                if let last = sec.lastPolledAt {
+                    Text("Last polled: \(last, formatter: updateTimeFormatter)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            HStack {
+                Text("Tickers with CIK:")
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("\(settings.secSymbolCIKMap.count)")
+                    .font(.system(.body, design: .monospaced))
+            }
+
+            if let error = sec.lastError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+        } header: {
+            Text("SEC Filings")
+        }
+    }
+}
 
 // MARK: - Suggestions Section
 
@@ -1945,5 +2090,62 @@ struct BonusFeaturesTab: View {
             .foregroundColor(.secondary)
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - CIK Edit Sheet
+
+struct CIKEditSheet: View {
+    let symbol: String
+    @Binding var cik: String
+    let onSave: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("SEC CIK for \(symbol)")
+                    .font(.headline)
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Save", action: onSave)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(12)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("CIK number")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("e.g. 1878057 or 0001878057", text: $cik)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+
+                Text("Find a company's CIK at:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Button(action: {
+                    if let url = URL(string: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=\(symbol)&type=&dateb=&owner=include&count=40") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    Text("sec.gov EDGAR company search")
+                        .font(.caption)
+                        .foregroundColor(.accentColor)
+                        .underline()
+                }
+                .buttonStyle(.borderless)
+
+                Text("Leave empty to remove this symbol from SEC polling.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 6)
+            }
+            .padding(12)
+        }
+        .frame(minWidth: 380, idealHeight: 240)
     }
 }

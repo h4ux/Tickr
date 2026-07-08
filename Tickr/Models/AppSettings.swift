@@ -215,6 +215,13 @@ class AppSettings: ObservableObject {
     private static let todoWindowWidthKey = "todoWindowWidth"
     private static let todoWindowHeightKey = "todoWindowHeight"
     private static let todoSyncEnabledKey = "todoSyncEnabled"
+    private static let secUserAgentNameKey = "secUserAgentName"
+    private static let secUserAgentEmailKey = "secUserAgentEmail"
+    private static let secPollingEnabledKey = "secPollingEnabled"
+    private static let secPollingIntervalKey = "secPollingIntervalMinutes"
+    private static let secDateRangeDaysKey = "secDateRangeDays"
+    private static let secNotifyOnNewKey = "secNotifyOnNewFilings"
+    private static let secSymbolCIKMapKey = "secSymbolCIKMap"
     private static let showMarketCapKey = "showMarketCap"
     private static let menuBarMaxWidthKey = "menuBarMaxWidth"
 
@@ -393,6 +400,63 @@ class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(todoSyncEnabled, forKey: Self.todoSyncEnabledKey) }
     }
 
+    // MARK: SEC EDGAR filings
+
+    @Published var secUserAgentName: String {
+        didSet { UserDefaults.standard.set(secUserAgentName, forKey: Self.secUserAgentNameKey) }
+    }
+
+    @Published var secUserAgentEmail: String {
+        didSet { UserDefaults.standard.set(secUserAgentEmail, forKey: Self.secUserAgentEmailKey) }
+    }
+
+    @Published var secPollingEnabled: Bool {
+        didSet { UserDefaults.standard.set(secPollingEnabled, forKey: Self.secPollingEnabledKey) }
+    }
+
+    @Published var secPollingIntervalMinutes: Int {
+        didSet { UserDefaults.standard.set(secPollingIntervalMinutes, forKey: Self.secPollingIntervalKey) }
+    }
+
+    @Published var secDateRangeDays: Int {
+        didSet { UserDefaults.standard.set(secDateRangeDays, forKey: Self.secDateRangeDaysKey) }
+    }
+
+    @Published var secNotifyOnNewFilings: Bool {
+        didSet { UserDefaults.standard.set(secNotifyOnNewFilings, forKey: Self.secNotifyOnNewKey) }
+    }
+
+    /// Ticker symbol → CIK number (as entered by user; may be zero-padded or bare).
+    @Published var secSymbolCIKMap: [String: String] {
+        didSet {
+            if let data = try? JSONEncoder().encode(secSymbolCIKMap) {
+                UserDefaults.standard.set(data, forKey: Self.secSymbolCIKMapKey)
+            }
+        }
+    }
+
+    /// Whether the SEC user-agent has both name and email set (required by SEC).
+    var secUserAgentConfigured: Bool {
+        !secUserAgentName.trimmingCharacters(in: .whitespaces).isEmpty &&
+            !secUserAgentEmail.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    func cik(for symbol: String) -> String? {
+        let value = secSymbolCIKMap[symbol]?.trimmingCharacters(in: .whitespaces)
+        return (value?.isEmpty ?? true) ? nil : value
+    }
+
+    func setCIK(_ cik: String?, for symbol: String) {
+        var map = secSymbolCIKMap
+        let cleaned = cik?.trimmingCharacters(in: .whitespaces)
+        if let cleaned = cleaned, !cleaned.isEmpty {
+            map[symbol] = cleaned
+        } else {
+            map.removeValue(forKey: symbol)
+        }
+        secSymbolCIKMap = map
+    }
+
     @Published var showMarketCap: Bool {
         didSet {
             UserDefaults.standard.set(showMarketCap, forKey: Self.showMarketCapKey)
@@ -564,6 +628,26 @@ class AppSettings: ObservableObject {
         let storedTH = UserDefaults.standard.integer(forKey: Self.todoWindowHeightKey)
         self.todoWindowHeight = storedTH > 0 ? storedTH : 560
         self.todoSyncEnabled = UserDefaults.standard.bool(forKey: Self.todoSyncEnabledKey)
+
+        // SEC EDGAR settings — sensible defaults so the toggle works out of the box.
+        self.secUserAgentName = UserDefaults.standard.string(forKey: Self.secUserAgentNameKey) ?? ""
+        self.secUserAgentEmail = UserDefaults.standard.string(forKey: Self.secUserAgentEmailKey) ?? ""
+        self.secPollingEnabled = UserDefaults.standard.bool(forKey: Self.secPollingEnabledKey)
+        let storedSecInterval = UserDefaults.standard.integer(forKey: Self.secPollingIntervalKey)
+        self.secPollingIntervalMinutes = storedSecInterval > 0 ? storedSecInterval : 30
+        let storedRange = UserDefaults.standard.integer(forKey: Self.secDateRangeDaysKey)
+        self.secDateRangeDays = storedRange > 0 ? storedRange : 30
+        if UserDefaults.standard.object(forKey: Self.secNotifyOnNewKey) == nil {
+            self.secNotifyOnNewFilings = true
+        } else {
+            self.secNotifyOnNewFilings = UserDefaults.standard.bool(forKey: Self.secNotifyOnNewKey)
+        }
+        if let data = UserDefaults.standard.data(forKey: Self.secSymbolCIKMapKey),
+           let map = try? JSONDecoder().decode([String: String].self, from: data) {
+            self.secSymbolCIKMap = map
+        } else {
+            self.secSymbolCIKMap = [:]
+        }
         self.showMarketCap = UserDefaults.standard.bool(forKey: Self.showMarketCapKey)
         self.menuBarMaxWidth = UserDefaults.standard.double(forKey: Self.menuBarMaxWidthKey)
         self.showAdsWhenLicensed = UserDefaults.standard.bool(forKey: Self.showAdsKey)

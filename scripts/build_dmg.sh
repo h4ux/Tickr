@@ -41,6 +41,7 @@ swiftc \
     Tickr/Models/AppSettings.swift \
     Tickr/Models/ClipboardItem.swift \
     Tickr/Models/TodoItem.swift \
+    Tickr/Models/FilingItem.swift \
     Tickr/Services/StockService.swift \
     Tickr/Services/AnalyticsService.swift \
     Tickr/Services/SuggestionsService.swift \
@@ -53,6 +54,7 @@ swiftc \
     Tickr/Services/ClipboardSyncService.swift \
     Tickr/Services/TodoService.swift \
     Tickr/Services/TodoSyncService.swift \
+    Tickr/Services/SECService.swift \
     Tickr/Services/HotKeyService.swift \
     Tickr/Services/Secrets.swift \
     Tickr/Views/StatusBarController.swift \

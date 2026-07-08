@@ -1,8 +1,20 @@
 import SwiftUI
 
+enum DropdownTab: String, CaseIterable, Identifiable {
+    case tickers, sec
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .tickers: return "Tickers"
+        case .sec:     return "SEC Filings"
+        }
+    }
+}
+
 struct TickerDropdownView: View {
     @ObservedObject private var stockService = StockService.shared
     @ObservedObject private var settings = AppSettings.shared
+    @State private var activeTab: DropdownTab = .tickers
     var onSettings: () -> Void
 
     var body: some View {
@@ -54,9 +66,25 @@ struct TickerDropdownView: View {
                 }
             }
 
+            // Tab bar — Tickers vs SEC pull history. Only shown when
+            // SEC feature is meaningful (user has at least one CIK set).
+            if !settings.secSymbolCIKMap.isEmpty {
+                Picker("", selection: $activeTab) {
+                    ForEach(DropdownTab.allCases) { tab in
+                        Text(tab.label).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+
             Divider()
 
-            if let error = stockService.errorMessage {
+            if activeTab == .sec {
+                SECFilingsHistoryView()
+            } else if let error = stockService.errorMessage {
                 VStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.title2)
@@ -512,6 +540,30 @@ struct StockRowView: View {
                             .foregroundColor(.secondary)
                     }
 
+                    // Recent SEC filings — only when a CIK is set for this symbol.
+                    // Uses date-range setting; full history lives in the SEC tab.
+                    if let cik = AppSettings.shared.cik(for: quote.symbol) {
+                        let items = SECService.shared.recentFilings(for: quote.symbol)
+                        if !items.isEmpty {
+                        HStack(spacing: 4) {
+                            Text("Recent SEC Filings")
+                                .font(.system(.caption, weight: .bold))
+                                .foregroundColor(.primary)
+                            // Strip any user-entered "CIK" prefix so we don't render "CIK CIK...".
+                            let displayCIK: String = {
+                                let stripped = cik.uppercased().hasPrefix("CIK") ? String(cik.dropFirst(3)) : cik
+                                return stripped.trimmingCharacters(in: CharacterSet(charactersIn: " 0")).isEmpty ? cik : stripped
+                            }()
+                            Text("CIK \(displayCIK)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        ForEach(items.prefix(5)) { filing in
+                            FilingRowView(filing: filing)
+                        }
+                        }  // inner `if !items.isEmpty`
+                    }      // outer `if let cik`
+
                     Divider().padding(.horizontal, 4)
 
                     // Yahoo Finance link
@@ -756,3 +808,395 @@ private let timeFormatter: DateFormatter = {
     f.timeStyle = .short
     return f
 }()
+
+// MARK: - Filing row (shared between per-ticker list + global insider list)
+
+struct FilingRowView: View {
+    let filing: FilingItem
+    /// When true, the row shows a small "$SYMBOL" prefix — useful in the
+    /// cross-ticker "Recent Insider Activity" section.
+    var showsSymbol: Bool = false
+
+    var body: some View {
+        Button(action: {
+            if let url = filing.documentURL { NSWorkspace.shared.open(url) }
+        }) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text(filing.form)
+                        .font(.system(.caption2, design: .monospaced, weight: .semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.accentColor.opacity(0.15))
+                        .cornerRadius(3)
+                    if showsSymbol {
+                        Text(filing.symbol)
+                            .font(.system(.caption2, design: .monospaced, weight: .semibold))
+                            .foregroundColor(.primary)
+                    }
+                    Text(filing.filingDate)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                }
+
+                if filing.displayTitle != filing.form {
+                    Text(filing.displayTitle)
+                        .font(.caption2)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if filing.isInsiderForm, let insider = filing.insider {
+                    insiderBlock(insider)
+                }
+            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 4)
+            .background(Color.accentColor.opacity(0.04))
+            .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func insiderBlock(_ insider: FilingItem.InsiderInfo) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Owner + relationship
+            HStack(spacing: 4) {
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: 9))
+                    .foregroundColor(.accentColor)
+                Text(insider.ownerName)
+                    .font(.system(.caption2, weight: .semibold))
+                    .foregroundColor(.primary)
+                if !insider.relationships.isEmpty {
+                    Text("· \(insider.relationships.joined(separator: ", "))")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+
+            // Up to 3 transactions
+            ForEach(Array(insider.transactions.prefix(3).enumerated()), id: \.offset) { _, tx in
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.forward")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                    Text(tx.compactSummary)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.primary)
+                    if !tx.sharesHeldAfter.isEmpty {
+                        Text("· holds \(FilingItem.InsiderTransaction.formatShares(tx.sharesHeldAfter))")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            if insider.transactions.count > 3 {
+                Text("+\(insider.transactions.count - 3) more")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.top, 2)
+    }
+}
+
+// MARK: - SEC Filings history tab
+
+private enum FilingFilter: String, CaseIterable, Identifiable {
+    case all, insider, corporate
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .all:       return "All"
+        case .insider:   return "Insider"
+        case .corporate: return "Corporate"
+        }
+    }
+}
+
+struct SECFilingsHistoryView: View {
+    @ObservedObject private var sec = SECService.shared
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var stockService = StockService.shared
+    @State private var filter: FilingFilter = .all
+    @State private var search: String = ""
+    @State private var collapsedSymbols: Set<String> = []
+
+    private var allFilings: [FilingItem] {
+        sec.filings.values.flatMap { $0 }
+    }
+
+    private var filtered: [FilingItem] {
+        var out = allFilings
+        switch filter {
+        case .all: break
+        case .insider:   out = out.filter { $0.isInsiderForm }
+        case .corporate: out = out.filter { !$0.isInsiderForm }
+        }
+        if !search.isEmpty {
+            let q = search.lowercased()
+            out = out.filter {
+                $0.symbol.lowercased().contains(q)
+                    || $0.form.lowercased().contains(q)
+                    || $0.displayTitle.lowercased().contains(q)
+                    || ($0.insider?.ownerName.lowercased().contains(q) ?? false)
+            }
+        }
+        return out
+    }
+
+    /// Filtered filings grouped by ticker, each group's filings sorted
+    /// newest-first, and groups themselves sorted by most-recent filing.
+    private var groups: [(symbol: String, filings: [FilingItem])] {
+        var buckets: [String: [FilingItem]] = [:]
+        for f in filtered {
+            buckets[f.symbol, default: []].append(f)
+        }
+        return buckets
+            .map { (symbol: $0.key, filings: $0.value.sorted { $0.filingDate > $1.filingDate }) }
+            .sorted { ($0.filings.first?.filingDate ?? "") > ($1.filings.first?.filingDate ?? "") }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Toolbar — search + filter + poll now + last-polled timestamp
+            VStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                        .font(.caption2)
+                    TextField("Search ticker, form, title, insider…", text: $search)
+                        .textFieldStyle(.plain)
+                        .font(.caption)
+                    if !search.isEmpty {
+                        Button(action: { search = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.caption2)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                .padding(6)
+                .background(Color.secondary.opacity(0.08))
+                .cornerRadius(6)
+
+                HStack(spacing: 8) {
+                    Picker("", selection: $filter) {
+                        ForEach(FilingFilter.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+
+                    Button(action: { sec.pollAll() }) {
+                        if sec.isPolling {
+                            ProgressView().scaleEffect(0.5)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.caption)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(sec.isPolling || !settings.secUserAgentConfigured)
+                    .help("Poll SEC now")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            // Filings — grouped by ticker
+            if filtered.isEmpty {
+                VStack(spacing: 6) {
+                    Spacer(minLength: 20)
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 28))
+                        .foregroundColor(.secondary)
+                    Text(allFilings.isEmpty ? emptyMessage : "No matches")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 12)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(groups, id: \.symbol) { group in
+                            companyGroup(group)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+            }
+
+            Divider()
+
+            // Footer — count + last polled + any error
+            HStack(spacing: 8) {
+                Text("\(filtered.count) of \(allFilings.count)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Spacer()
+                if let last = sec.lastPolledAt {
+                    Text("Last polled: \(last, formatter: filingHistoryTimeFormatter)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+
+            if let error = sec.lastError {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundColor(.red)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 4)
+            }
+        }
+    }
+
+    private var emptyMessage: String {
+        if !settings.secUserAgentConfigured {
+            return "Set SEC user-agent (name + email) in Settings → General → SEC Filings, then assign a CIK to a ticker."
+        }
+        if settings.secSymbolCIKMap.isEmpty {
+            return "Assign a CIK to at least one ticker in Settings → Appearance → Tickers."
+        }
+        return "Nothing pulled yet. Tap the ↻ button to poll SEC now."
+    }
+
+    // MARK: - Group rendering
+
+    @ViewBuilder
+    private func companyGroup(_ group: (symbol: String, filings: [FilingItem])) -> some View {
+        let collapsed = collapsedSymbols.contains(group.symbol)
+        VStack(alignment: .leading, spacing: 4) {
+            Button(action: {
+                if collapsed { collapsedSymbols.remove(group.symbol) }
+                else         { collapsedSymbols.insert(group.symbol) }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: collapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 10)
+
+                    Text(group.symbol)
+                        .font(.system(.caption, design: .monospaced, weight: .bold))
+                        .foregroundColor(.primary)
+
+                    if let companyName = stockService.quote(for: group.symbol)?.shortCompanyName {
+                        Text(companyName)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+
+                    Spacer()
+
+                    Text("\(group.filings.count)")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.accentColor.opacity(0.15))
+                        .cornerRadius(3)
+                        .foregroundColor(.primary)
+
+                    if let latest = group.filings.first {
+                        Text(latest.filingDate)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .contentShape(Rectangle())
+                .padding(.vertical, 4)
+                .padding(.horizontal, 6)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .cornerRadius(4)
+            }
+            .buttonStyle(.plain)
+
+            if !collapsed {
+                VStack(spacing: 3) {
+                    ForEach(group.filings, id: \.accessionNumber) { filing in
+                        FilingRowView(filing: filing, showsSymbol: false)
+                    }
+                }
+                .padding(.leading, 12)
+            }
+        }
+    }
+}
+
+private let filingHistoryTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateStyle = .short
+    f.timeStyle = .short
+    return f
+}()
+
+// MARK: - Recent insider activity across all tickers
+
+struct RecentInsiderActivityView: View {
+    @ObservedObject private var sec = SECService.shared
+    @State private var isExpanded = false
+
+    var body: some View {
+        let items = sec.recentInsiderFilings.prefix(20)
+        if items.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "person.2.badge.gearshape")
+                            .foregroundColor(.accentColor)
+                            .font(.caption)
+                        Text("Recent Insider Activity")
+                            .font(.system(.caption, weight: .bold))
+                            .foregroundColor(.primary)
+                        Text("(\(items.count))")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if isExpanded {
+                    VStack(spacing: 3) {
+                        ForEach(Array(items), id: \.accessionNumber) { filing in
+                            FilingRowView(filing: filing, showsSymbol: true)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color(nsColor: .windowBackgroundColor))
+        }
+    }
+}
