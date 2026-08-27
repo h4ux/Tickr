@@ -30,41 +30,22 @@ echo "==> Compiling Tickr (Release)..."
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/MacOS" "$APP_DIR/Resources"
 
-swiftc \
-    -sdk "$SDK_PATH" \
-    -target arm64-apple-macos13.0 \
-    -O \
-    -whole-module-optimization \
-    -o "$APP_DIR/MacOS/Tickr" \
-    Tickr/TickrApp.swift \
-    Tickr/Models/StockData.swift \
-    Tickr/Models/AppSettings.swift \
-    Tickr/Models/ClipboardItem.swift \
-    Tickr/Models/TodoItem.swift \
-    Tickr/Models/FilingItem.swift \
-    Tickr/Services/StockService.swift \
-    Tickr/Services/AnalyticsService.swift \
-    Tickr/Services/SuggestionsService.swift \
-    Tickr/Services/UpdateService.swift \
-    Tickr/Services/LicenseService.swift \
-    Tickr/Services/AdService.swift \
-    Tickr/Services/LaunchAtLoginService.swift \
-    Tickr/Services/NotificationService.swift \
-    Tickr/Services/ClipboardService.swift \
-    Tickr/Services/ClipboardSyncService.swift \
-    Tickr/Services/TodoService.swift \
-    Tickr/Services/TodoSyncService.swift \
-    Tickr/Services/SECService.swift \
-    Tickr/Services/HotKeyService.swift \
-    Tickr/Services/BackupService.swift \
-    Tickr/Services/Secrets.swift \
-    Tickr/Views/StatusBarController.swift \
-    Tickr/Views/TickerDropdownView.swift \
-    Tickr/Views/SettingsView.swift \
-    Tickr/Views/ClipboardHistoryWindow.swift \
-    Tickr/Views/TodoWindow.swift \
-    Tickr/Views/ShortcutRecorder.swift \
-    Tickr/Views/UpdateBanner.swift
+source "$SCRIPT_DIR/sources.sh"
+
+# Universal binary — arm64 + x86_64, so Intel Macs can run it too.
+for ARCH in arm64 x86_64; do
+    echo "    building $ARCH..."
+    swiftc \
+        -sdk "$SDK_PATH" \
+        -target "$ARCH-apple-macos13.0" \
+        -O \
+        -whole-module-optimization \
+        -o "$BUILD_DIR/Tickr-$ARCH" \
+        "${TICKR_SOURCES[@]}"
+done
+
+lipo -create -output "$APP_DIR/MacOS/Tickr" "$BUILD_DIR/Tickr-arm64" "$BUILD_DIR/Tickr-x86_64"
+rm -f "$BUILD_DIR/Tickr-arm64" "$BUILD_DIR/Tickr-x86_64"
 
 # Assemble app bundle
 cp Tickr/Info.plist "$APP_DIR/Info.plist"

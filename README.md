@@ -51,9 +51,35 @@ Configure display format, colors, refresh interval, analytics preferences, and m
 1. Download the latest `Tickr.dmg` from [Releases](../../releases)
 2. Open the DMG file
 3. Drag **Tickr** to your **Applications** folder
-4. Launch Tickr from Applications
+4. Clear the download quarantine flag, otherwise macOS will block it:
 
-> **Note:** On first launch, macOS may show a security prompt. Go to **System Settings > Privacy & Security** and click "Open Anyway."
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Tickr.app
+   ```
+
+5. Launch Tickr from Applications
+
+> **Why step 4?** Tickr is ad-hoc signed rather than notarized (notarization
+> needs a paid Apple Developer account). macOS quarantines anything downloaded
+> from the internet, and refuses to launch an ad-hoc signed app that carries
+> the flag — usually reporting *"Tickr is damaged and can't be opened"*. The
+> command above removes the flag. You can inspect exactly what you're running
+> first: the whole app is in this repo and builds from source in one command.
+
+### "I launched it and nothing happened"
+
+Tickr is a **menu bar app** — it deliberately has no Dock icon and no window
+(`LSUIElement`), so a blocked or crashed launch looks identical to nothing
+happening. To tell the difference:
+
+```bash
+pgrep -x Tickr && echo "running"          # is it actually running?
+/Applications/Tickr.app/Contents/MacOS/Tickr   # run directly to see any error
+```
+
+If it *is* running but you can't find it, your menu bar is probably full and
+the icon is hidden behind the notch — quit a menu bar app or two, or ⌘-drag
+items to reorder them.
 
 ### Build from Source
 
