@@ -122,6 +122,7 @@ struct SettingsView: View {
             LaunchAtLoginSection()
             SECSection()
             UpdateSection()
+            BackupRestoreSection()
             AnalyticsSection()
         }
         .formStyle(.grouped)
@@ -2147,5 +2148,221 @@ struct CIKEditSheet: View {
             .padding(12)
         }
         .frame(minWidth: 380, idealHeight: 240)
+    }
+}
+
+// MARK: - Backup & Restore Section
+
+struct BackupRestoreSection: View {
+    @State private var mode: SheetMode?
+    @State private var statusText: String?
+    @State private var statusIsError = false
+
+    /// Drives the one sheet used for both directions.
+    private enum SheetMode: Identifiable {
+        case export
+        case importing(TickrBackup)
+
+        var id: String {
+            switch self {
+            case .export:    return "export"
+            case .importing: return "import"
+            }
+        }
+    }
+
+    var body: some View {
+        Section {
+            Text("Save every setting, ticker, todo and clipboard entry to a single JSON file — then restore it on another Mac or after a clean install.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 10) {
+                Button {
+                    statusText = nil
+                    mode = .export
+                } label: {
+                    Label("Export…", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    statusText = nil
+                    pickFile()
+                } label: {
+                    Label("Import…", systemImage: "square.and.arrow.down")
+                }
+
+                Spacer()
+            }
+
+            if let statusText {
+                Text(statusText)
+                    .font(.caption)
+                    .foregroundColor(statusIsError ? .red : Color(nsColor: .systemGreen))
+            }
+        } header: {
+            Text("Backup & Restore")
+        }
+        .sheet(item: $mode) { mode in
+            switch mode {
+            case .export:
+                BackupPartsSheet(
+                    title: "Export Backup",
+                    message: "Choose what to include. The file is plain JSON, so you can inspect it before restoring.",
+                    summaries: BackupService.shared.currentSummaries(),
+                    confirmLabel: "Export…",
+                    isDestructive: false,
+                    onConfirm: { parts in runExport(parts) }
+                )
+            case .importing(let backup):
+                BackupPartsSheet(
+                    title: "Import Backup",
+                    message: importMessage(for: backup),
+                    summaries: BackupService.shared.summaries(for: backup),
+                    confirmLabel: "Import",
+                    isDestructive: true,
+                    onConfirm: { parts in runImport(backup, parts) }
+                )
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func pickFile() {
+        BackupService.shared.pickBackupFile { result in
+            guard let result else { return }  // cancelled
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let backup):
+                    mode = .importing(backup)
+                case .failure(let error):
+                    statusIsError = true
+                    statusText = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func runExport(_ parts: Set<BackupPart>) {
+        mode = nil
+        BackupService.shared.exportToFile(parts: parts) { error in
+            DispatchQueue.main.async {
+                guard let error else { return }
+                statusIsError = true
+                statusText = error
+            }
+        }
+    }
+
+    private func runImport(_ backup: TickrBackup, _ parts: Set<BackupPart>) {
+        mode = nil
+        let warnings = BackupService.shared.apply(backup, parts: parts)
+        statusIsError = !warnings.isEmpty
+        statusText = warnings.isEmpty
+            ? "Imported \(parts.count) \(parts.count == 1 ? "section" : "sections")."
+            : warnings.joined(separator: " ")
+    }
+
+    private func importMessage(for backup: TickrBackup) -> String {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return "Backup from Tickr \(backup.appVersion), \(f.string(from: backup.exportedAt)). Whatever you select replaces what's on this Mac — this can't be undone."
+    }
+}
+
+/// Shared picker for export and import. Rows a backup doesn't contain are
+/// shown greyed out rather than hidden, so it's obvious what's missing.
+struct BackupPartsSheet: View {
+    let title: String
+    let message: String
+    let summaries: [BackupSummary]
+    let confirmLabel: String
+    let isDestructive: Bool
+    let onConfirm: (Set<BackupPart>) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected: Set<BackupPart> = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.headline)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+
+            Text(message)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+
+            Divider().padding(.vertical, 12)
+
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(summaries) { summary in
+                    Toggle(isOn: binding(for: summary)) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: summary.part.icon)
+                                .foregroundColor(summary.isAvailable ? .accentColor : .secondary)
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                HStack(spacing: 6) {
+                                    Text(summary.part.title)
+                                        .fontWeight(.medium)
+                                    Text(summary.detail ?? "not in this backup")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Text(summary.part.explanation)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .disabled(!summary.isAvailable)
+                }
+            }
+            .padding(.horizontal, 16)
+
+            Divider().padding(.vertical, 12)
+
+            HStack {
+                Button("Select All") { selected = Set(available) }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                Button("Select None") { selected = [] }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+
+                Spacer()
+
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+
+                Button(confirmLabel) { onConfirm(selected) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(selected.isEmpty)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+        .frame(width: 460)
+        .onAppear { selected = Set(available) }
+    }
+
+    private var available: [BackupPart] {
+        summaries.filter(\.isAvailable).map(\.part)
+    }
+
+    private func binding(for summary: BackupSummary) -> Binding<Bool> {
+        Binding(
+            get: { selected.contains(summary.part) },
+            set: { on in
+                if on { selected.insert(summary.part) } else { selected.remove(summary.part) }
+            }
+        )
     }
 }

@@ -466,6 +466,28 @@ class SECService: ObservableObject {
         return f.string(from: cutoff)
     }
 
+    // MARK: - Backup
+
+    /// Everything this service persists, for the backup exporter.
+    func exportSnapshot() -> (filings: [String: [FilingItem]],
+                              seenAccessions: [String: [String]],
+                              insiderCache: [String: FilingItem.InsiderInfo]) {
+        (filings, seenAccessions.mapValues { Array($0) }, insiderCache)
+    }
+
+    /// Replace the cached filings wholesale (used by backup import).
+    func importSnapshot(filings: [String: [FilingItem]],
+                        seenAccessions: [String: Set<String>],
+                        insiderCache: [String: FilingItem.InsiderInfo]) {
+        self.filings = filings
+        self.seenAccessions = seenAccessions
+        self.insiderCache = insiderCache
+        saveFilings()
+        saveSeenAccessions()
+        saveInsiderCache()
+        UserDefaults.standard.set(Self.insiderCacheVersion, forKey: Self.insiderCacheVersionKey)
+    }
+
     // MARK: - Persistence
 
     private func loadFromDisk() {

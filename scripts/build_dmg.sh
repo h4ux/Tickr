@@ -56,6 +56,7 @@ swiftc \
     Tickr/Services/TodoSyncService.swift \
     Tickr/Services/SECService.swift \
     Tickr/Services/HotKeyService.swift \
+    Tickr/Services/BackupService.swift \
     Tickr/Services/Secrets.swift \
     Tickr/Views/StatusBarController.swift \
     Tickr/Views/TickerDropdownView.swift \

@@ -97,6 +97,12 @@ class TodoService: ObservableObject {
         saveToDisk()
     }
 
+    /// Replace the whole list (used by backup import).
+    func replaceAll(_ newItems: [TodoItem]) {
+        items = newItems
+        saveToDisk()
+    }
+
     // MARK: - Export
 
     /// Render the entire list as a portable Markdown document.

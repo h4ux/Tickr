@@ -165,6 +165,14 @@ class ClipboardService: ObservableObject {
         ClipboardSyncService.shared.pushDeletionIfEnabled(itemId: item.id)
     }
 
+    /// Replace the whole history (used by backup import). Trimmed to the
+    /// configured limit so an import can't blow past the user's setting.
+    func replaceAll(_ newItems: [ClipboardItem]) {
+        let limit = max(1, settings.clipboardHistoryLimit)
+        items = Array(newItems.prefix(limit))
+        saveToDisk()
+    }
+
     func clearAll() {
         for item in items {
             ClipboardSyncService.shared.pushDeletionIfEnabled(itemId: item.id)
